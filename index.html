@@ -867,12 +867,16 @@
           <input type="number" name="lineaCredito" step="0.01" min="0" placeholder="0.00">
         </div>
         <div class="field" id="campoDeudaSaldo">
-          <label>Deuda actual (punto de partida)</label>
+          <label id="labelDeudaSaldo">Deuda actual (punto de partida)</label>
           <input type="number" name="saldo" step="0.01" min="0" placeholder="0.00" required>
         </div>
         <div class="field">
           <label>Tasa de interés % (opcional)</label>
           <input type="number" name="tasa" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Día de facturación (opcional)</label>
+          <input type="number" name="diaFacturacion" min="1" max="31" placeholder="5">
         </div>
         <div class="field">
           <label>Día de pago (opcional)</label>
@@ -881,6 +885,7 @@
         <button type="submit" class="btn" id="btnDeudaSubmit">Agregar</button>
         <button type="button" class="btn secondary" id="btnDeudaCancelar" style="display:none">Cancelar</button>
       </form>
+      <p class="hint" id="deudaEditHint" style="margin:10px 0 0;display:none">Al editar, si cambias la "Deuda actual" se registrará un movimiento de ajuste automático por la diferencia.</p>
     </div>
 
     <div class="grid stats-grid" id="deudaStats"></div>
@@ -889,7 +894,7 @@
       <h2>📋 Mis tarjetas y deudas</h2>
       <p class="hint">Cada tarjeta tiene su propia moneda. Usa "Movimientos" para desglosar cada cargo (compra) y cada pago que hagas — incluye los que se agregan automáticamente desde Gastos, Gastos Fijos e Inversiones.</p>
       <table>
-        <thead><tr><th>Nombre</th><th>Línea de crédito</th><th>Deuda actual</th><th>% Uso</th><th>Tasa</th><th>Día de pago</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Línea de crédito</th><th>Deuda actual</th><th>% Uso</th><th>Tasa</th><th>Facturación</th><th>Día de pago</th><th></th></tr></thead>
         <tbody id="tblDeudas"></tbody>
       </table>
       <div class="empty" id="emptyDeudas" style="display:none">No tienes tarjetas ni deudas registradas. ¡Bien ahí!</div>
@@ -1118,10 +1123,10 @@
       };
     });
     var debts = (s.debts || []).map(function (x) {
-      if (x.movimientos) return Object.assign({ moneda: "PEN", diaPago: null }, x);
+      if (x.movimientos) return Object.assign({ moneda: "PEN", diaPago: null, diaFacturacion: null }, x);
       return {
         id: x.id || genId(), nombre: x.nombre, moneda: x.moneda || "PEN",
-        lineaCredito: Number(x.lineaCredito) || 0, tasa: x.tasa != null ? x.tasa : null, diaPago: null,
+        lineaCredito: Number(x.lineaCredito) || 0, tasa: x.tasa != null ? x.tasa : null, diaPago: null, diaFacturacion: null,
         movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: Number(x.saldo) || 0 }]
       };
     });
@@ -1344,12 +1349,14 @@
   }
   function variableIncomeAllTime() {
     var b = emptyBucket();
-    state.transactions.filter(function (t) { return t.tipo === "ingreso"; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    var hoy = todayStr();
+    state.transactions.filter(function (t) { return t.tipo === "ingreso" && t.fecha <= hoy; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
     return b;
   }
   function variableExpenseCashAllTime() {
     var b = emptyBucket();
-    state.transactions.filter(function (t) { return t.tipo === "gasto" && isCashMethod(t.metodoPago); }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    var hoy = todayStr();
+    state.transactions.filter(function (t) { return t.tipo === "gasto" && isCashMethod(t.metodoPago) && t.fecha <= hoy; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
     return b;
   }
   function isIncomeCobrado(x, mk) { return (x.cobros || []).indexOf(mk) > -1; }
@@ -1405,8 +1412,9 @@
   }
   function investmentCashOutflowAllTime() {
     var b = emptyBucket();
+    var hoy = todayStr();
     state.investments.forEach(function (inv) {
-      inv.aportes.forEach(function (a) { if (isCashMethod(a.metodoPago)) addToBucket(b, inv.moneda, Number(a.monto)); });
+      inv.aportes.forEach(function (a) { if (isCashMethod(a.metodoPago) && a.fecha <= hoy) addToBucket(b, inv.moneda, Number(a.monto)); });
     });
     return b;
   }
@@ -1756,6 +1764,7 @@
     e.preventDefault();
     var f = e.target;
     var keepDate = f.fecha.value;
+    document.getElementById("filtroMes").value = monthKeyOf(keepDate);
     registrarMovimiento({
       fecha: keepDate, tipo: f.tipo.value, categoria: f.categoria.value,
       concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value) || 0,
@@ -1765,7 +1774,6 @@
     f.fecha.value = keepDate;
     populateCategorySelect(f.tipo.value);
     updateMovFormMode();
-    document.getElementById("filtroMes").value = monthKeyOf(keepDate);
   });
 
   // ---------- Registro rápido (FAB) ----------
@@ -1837,8 +1845,8 @@
     editingDebtId = null;
     document.getElementById("btnDeudaSubmit").textContent = "Agregar";
     document.getElementById("btnDeudaCancelar").style.display = "none";
-    document.getElementById("campoDeudaSaldo").style.display = "";
-    f.saldo.required = true;
+    document.getElementById("labelDeudaSaldo").textContent = "Deuda actual (punto de partida)";
+    document.getElementById("deudaEditHint").style.display = "none";
   }
 
   function startEditDebt(id) {
@@ -1848,10 +1856,12 @@
     f.nombre.value = x.nombre;
     f.moneda.value = x.moneda;
     f.lineaCredito.value = x.lineaCredito || "";
+    f.saldo.value = debtSaldo(x);
     f.tasa.value = x.tasa != null ? x.tasa : "";
+    f.diaFacturacion.value = x.diaFacturacion != null ? x.diaFacturacion : "";
     f.diaPago.value = x.diaPago != null ? x.diaPago : "";
-    document.getElementById("campoDeudaSaldo").style.display = "none";
-    f.saldo.required = false;
+    document.getElementById("labelDeudaSaldo").textContent = "Deuda actual";
+    document.getElementById("deudaEditHint").style.display = "";
     editingDebtId = id;
     document.getElementById("btnDeudaSubmit").textContent = "Guardar cambios";
     document.getElementById("btnDeudaCancelar").style.display = "";
@@ -1871,13 +1881,21 @@
         x.moneda = f.moneda.value;
         x.lineaCredito = parseFloat(f.lineaCredito.value) || 0;
         x.tasa = f.tasa.value ? parseFloat(f.tasa.value) : null;
+        x.diaFacturacion = f.diaFacturacion.value ? parseInt(f.diaFacturacion.value, 10) : null;
         x.diaPago = f.diaPago.value ? parseInt(f.diaPago.value, 10) : null;
+        var nuevaDeuda = parseFloat(f.saldo.value) || 0;
+        var deudaActualCalculada = debtSaldo(x);
+        var delta = nuevaDeuda - deudaActualCalculada;
+        if (Math.abs(delta) > 0.005) {
+          x.movimientos.push({ id: genId(), fecha: todayStr(), tipo: delta > 0 ? "cargo" : "pago", concepto: "Ajuste manual", monto: Math.abs(delta) });
+        }
       }
     } else {
       state.debts.push({
         id: genId(), nombre: f.nombre.value.trim(), moneda: f.moneda.value,
         lineaCredito: parseFloat(f.lineaCredito.value) || 0,
         tasa: f.tasa.value ? parseFloat(f.tasa.value) : null,
+        diaFacturacion: f.diaFacturacion.value ? parseInt(f.diaFacturacion.value, 10) : null,
         diaPago: f.diaPago.value ? parseInt(f.diaPago.value, 10) : null,
         movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: parseFloat(f.saldo.value) || 0 }]
       });
@@ -2409,10 +2427,11 @@
       var saldo = debtSaldo(d);
       var pctUso = linea > 0 ? (saldo / linea * 100) : null;
       var expanded = !!expandedDebts[d.id];
+      var diaFacturacionCell = d.diaFacturacion ? '<span class="tag">🧾 Día ' + d.diaFacturacion + '</span>' : "—";
       var diaPagoCell = d.diaPago ? '<span class="tag card">📅 Día ' + d.diaPago + '</span>' : "—";
       var mainRow = "<tr><td>" + escapeHtml(d.nombre) + "</td><td>" + (linea > 0 ? fmtCur(linea, d.moneda) : "—") +
         '</td><td class="amount neg">' + fmtCur(saldo, d.moneda) + "</td><td>" + (pctUso !== null ? pctUso.toFixed(1) + "%" : "—") +
-        "</td><td>" + (d.tasa != null ? Number(d.tasa).toFixed(2) + "%" : "—") + "</td><td>" + diaPagoCell +
+        "</td><td>" + (d.tasa != null ? Number(d.tasa).toFixed(2) + "%" : "—") + "</td><td>" + diaFacturacionCell + "</td><td>" + diaPagoCell +
         '</td><td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap"><button class="btn secondary small toggle-movimientos" data-id="' + d.id + '">' + (expanded ? "Ocultar" : "Movimientos (" + d.movimientos.length + ")") + '</button> ' +
         '<button class="btn secondary small edit-debt-btn" data-id="' + d.id + '">✎</button>' +
         '<button class="del-btn" data-list="debts" data-id="' + d.id + '">✕</button></td></tr>';
@@ -2426,7 +2445,7 @@
           '</td><td><button class="del-btn del-movimiento-btn" data-debt-id="' + d.id + '" data-mov-id="' + m.id + '">✕</button></td></tr>';
       }).join("");
 
-      var detailRow = '<tr><td colspan="7"><div class="aportes-panel">' +
+      var detailRow = '<tr><td colspan="8"><div class="aportes-panel">' +
         '<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th></th></tr></thead><tbody>' + movRows + '</tbody></table>' +
         '<form class="inline form-movimiento-deuda" data-debt-id="' + d.id + '" style="margin-top:12px">' +
           '<div class="field"><label>Fecha</label><input type="date" name="fecha" value="' + todayStr() + '" required></div>' +
