@@ -389,6 +389,20 @@
     color: var(--muted);
   }
 
+  .month-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(34, 197, 94, 0.05));
+    border: 1px solid var(--accent-dark);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 8px 16px;
+    border-radius: 999px;
+    margin: 12px 0;
+  }
+
   .spinner {
     width: 28px; height: 28px;
     border: 3px solid var(--border);
@@ -508,6 +522,7 @@
       <input type="file" id="inputImport" accept="application/json" style="display:none">
     </div>
   </div>
+  <div class="month-badge" id="monthBadge"></div>
   <nav id="tabNav">
     <button data-tab="resumen" class="active">🏠 Resumen</button>
     <button data-tab="fijos">💵 Ingresos y Gastos Fijos</button>
@@ -796,12 +811,16 @@
           <label>Aporte mensual (opcional)</label>
           <input type="number" name="aporteMensual" step="0.01" min="0" placeholder="0.00">
         </div>
-        <div class="field">
+        <div class="field" id="campoInversionMetodoPago">
           <label>Método de pago</label>
           <select name="metodoPago" id="inversionMetodoPago" class="metodo-select"></select>
         </div>
         <button type="submit" class="btn">Agregar</button>
       </form>
+      <label class="checkbox-line" style="margin-top:14px">
+        <input type="checkbox" id="chkYaInvertido">
+        Este monto ya lo tenía invertido desde antes — no descontar de mi Saldo Actual
+      </label>
       <p class="hint" style="margin:10px 0 0"><b>Valor actual</b> es opcional — si es una inversión que no vas a revisar en años (AFP, un fondo a largo plazo), déjalo vacío y complétalo cuando lo consultes. Si defines un <b>aporte mensual</b>, cada mes verás un botón para confirmarlo, igual que tu sueldo. El método de pago se usa también para ese aporte mensual automático.</p>
     </div>
 
@@ -847,7 +866,7 @@
           <label>Línea de crédito</label>
           <input type="number" name="lineaCredito" step="0.01" min="0" placeholder="0.00">
         </div>
-        <div class="field">
+        <div class="field" id="campoDeudaSaldo">
           <label>Deuda actual (punto de partida)</label>
           <input type="number" name="saldo" step="0.01" min="0" placeholder="0.00" required>
         </div>
@@ -855,7 +874,12 @@
           <label>Tasa de interés % (opcional)</label>
           <input type="number" name="tasa" step="0.01" min="0" placeholder="0.00">
         </div>
-        <button type="submit" class="btn">Agregar</button>
+        <div class="field">
+          <label>Día de pago (opcional)</label>
+          <input type="number" name="diaPago" min="1" max="31" placeholder="20">
+        </div>
+        <button type="submit" class="btn" id="btnDeudaSubmit">Agregar</button>
+        <button type="button" class="btn secondary" id="btnDeudaCancelar" style="display:none">Cancelar</button>
       </form>
     </div>
 
@@ -865,7 +889,7 @@
       <h2>📋 Mis tarjetas y deudas</h2>
       <p class="hint">Cada tarjeta tiene su propia moneda. Usa "Movimientos" para desglosar cada cargo (compra) y cada pago que hagas — incluye los que se agregan automáticamente desde Gastos, Gastos Fijos e Inversiones.</p>
       <table>
-        <thead><tr><th>Nombre</th><th>Línea de crédito</th><th>Deuda actual</th><th>% Uso</th><th>Tasa</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Línea de crédito</th><th>Deuda actual</th><th>% Uso</th><th>Tasa</th><th>Día de pago</th><th></th></tr></thead>
         <tbody id="tblDeudas"></tbody>
       </table>
       <div class="empty" id="emptyDeudas" style="display:none">No tienes tarjetas ni deudas registradas. ¡Bien ahí!</div>
@@ -979,6 +1003,7 @@
   var expandedDebts = {};
   var editingIncomeId = null;
   var editingExpenseId = null;
+  var editingDebtId = null;
 
   // ---------- Helpers ----------
   function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -1025,9 +1050,11 @@
 
   // ---------- Método de pago helpers ----------
   function isCardMethod(m) { return typeof m === "string" && m.indexOf("debt:") === 0; }
-  function isCashMethod(m) { return !isCardMethod(m || "efectivo"); }
+  function isPrevioMethod(m) { return m === "previo"; }
+  function isCashMethod(m) { return !isCardMethod(m || "efectivo") && !isPrevioMethod(m); }
   function methodDebtId(m) { return isCardMethod(m) ? m.slice(5) : null; }
   function metodoPagoLabel(m) {
+    if (isPrevioMethod(m)) return "Ya lo tenía";
     if (!m || METODO_LABELS[m]) return METODO_LABELS[m] || "Efectivo";
     if (isCardMethod(m)) {
       var d = state.debts.find(function (x) { return x.id === methodDebtId(m); });
@@ -1091,10 +1118,10 @@
       };
     });
     var debts = (s.debts || []).map(function (x) {
-      if (x.movimientos) return Object.assign({ moneda: "PEN" }, x);
+      if (x.movimientos) return Object.assign({ moneda: "PEN", diaPago: null }, x);
       return {
         id: x.id || genId(), nombre: x.nombre, moneda: x.moneda || "PEN",
-        lineaCredito: Number(x.lineaCredito) || 0, tasa: x.tasa != null ? x.tasa : null,
+        lineaCredito: Number(x.lineaCredito) || 0, tasa: x.tasa != null ? x.tasa : null, diaPago: null,
         movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: Number(x.saldo) || 0 }]
       };
     });
@@ -1159,8 +1186,16 @@
     });
   }
 
+  function updateMonthBadge() {
+    var d = new Date();
+    var texto = d.toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    texto = texto.charAt(0).toUpperCase() + texto.slice(1);
+    document.getElementById("monthBadge").textContent = "📅 Hoy: " + texto;
+  }
+
   function startApp() {
     document.getElementById("sessionEmail").textContent = currentSession.user.email;
+    updateMonthBadge();
     document.getElementById("formMovimiento").fecha.value = todayStr();
     document.getElementById("formInversion").fecha.value = todayStr();
     document.getElementById("filtroMes").value = currentMonthKey();
@@ -1770,34 +1805,84 @@
     closeQuickAdd();
   });
 
+  document.getElementById("chkYaInvertido").addEventListener("change", function (e) {
+    document.getElementById("campoInversionMetodoPago").style.display = e.target.checked ? "none" : "";
+  });
+
   document.getElementById("formInversion").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
+    var yaInvertido = document.getElementById("chkYaInvertido").checked;
     var metodo = f.metodoPago.value;
+    var metodoAporteInicial = yaInvertido ? "previo" : metodo;
     var fecha = f.fecha.value, nombre = f.nombre.value.trim(), montoInicial = parseFloat(f.montoInvertido.value) || 0;
-    var debtMovId = isCardMethod(metodo) ? pushCargoToDebt(metodo, fecha, nombre, montoInicial) : null;
+    var debtMovId = isCardMethod(metodoAporteInicial) ? pushCargoToDebt(metodoAporteInicial, fecha, nombre, montoInicial) : null;
     state.investments.push({
       id: genId(), tipo: f.tipo.value, nombre: nombre, moneda: f.moneda.value, fechaInicio: fecha,
       valorActual: f.valorActual.value ? parseFloat(f.valorActual.value) : null,
       aporteMensual: f.aporteMensual.value ? parseFloat(f.aporteMensual.value) : null,
       aportesMensuales: [], metodoPago: metodo,
-      aportes: [{ id: genId(), fecha: fecha, monto: montoInicial, metodoPago: metodo, debtMovId: debtMovId }]
+      aportes: [{ id: genId(), fecha: fecha, monto: montoInicial, metodoPago: metodoAporteInicial, debtMovId: debtMovId }]
     });
     f.reset();
+    document.getElementById("chkYaInvertido").checked = false;
+    document.getElementById("campoInversionMetodoPago").style.display = "";
     saveState();
     renderAll();
   });
 
+  function resetDebtForm() {
+    var f = document.getElementById("formDeuda");
+    f.reset();
+    editingDebtId = null;
+    document.getElementById("btnDeudaSubmit").textContent = "Agregar";
+    document.getElementById("btnDeudaCancelar").style.display = "none";
+    document.getElementById("campoDeudaSaldo").style.display = "";
+    f.saldo.required = true;
+  }
+
+  function startEditDebt(id) {
+    var x = state.debts.find(function (i) { return i.id === id; });
+    if (!x) return;
+    var f = document.getElementById("formDeuda");
+    f.nombre.value = x.nombre;
+    f.moneda.value = x.moneda;
+    f.lineaCredito.value = x.lineaCredito || "";
+    f.tasa.value = x.tasa != null ? x.tasa : "";
+    f.diaPago.value = x.diaPago != null ? x.diaPago : "";
+    document.getElementById("campoDeudaSaldo").style.display = "none";
+    f.saldo.required = false;
+    editingDebtId = id;
+    document.getElementById("btnDeudaSubmit").textContent = "Guardar cambios";
+    document.getElementById("btnDeudaCancelar").style.display = "";
+    f.nombre.focus();
+    f.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  document.getElementById("btnDeudaCancelar").addEventListener("click", resetDebtForm);
+
   document.getElementById("formDeuda").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
-    state.debts.push({
-      id: genId(), nombre: f.nombre.value.trim(), moneda: f.moneda.value,
-      lineaCredito: parseFloat(f.lineaCredito.value) || 0,
-      tasa: f.tasa.value ? parseFloat(f.tasa.value) : null,
-      movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: parseFloat(f.saldo.value) || 0 }]
-    });
-    f.reset();
+    if (editingDebtId) {
+      var x = state.debts.find(function (i) { return i.id === editingDebtId; });
+      if (x) {
+        x.nombre = f.nombre.value.trim();
+        x.moneda = f.moneda.value;
+        x.lineaCredito = parseFloat(f.lineaCredito.value) || 0;
+        x.tasa = f.tasa.value ? parseFloat(f.tasa.value) : null;
+        x.diaPago = f.diaPago.value ? parseInt(f.diaPago.value, 10) : null;
+      }
+    } else {
+      state.debts.push({
+        id: genId(), nombre: f.nombre.value.trim(), moneda: f.moneda.value,
+        lineaCredito: parseFloat(f.lineaCredito.value) || 0,
+        tasa: f.tasa.value ? parseFloat(f.tasa.value) : null,
+        diaPago: f.diaPago.value ? parseInt(f.diaPago.value, 10) : null,
+        movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: parseFloat(f.saldo.value) || 0 }]
+      });
+    }
+    resetDebtForm();
     saveState();
     renderAll();
   });
@@ -1893,6 +1978,11 @@
       startEditExpense(editExpenseBtn.dataset.id);
       return;
     }
+    var editDebtBtn = e.target.closest(".edit-debt-btn");
+    if (editDebtBtn) {
+      startEditDebt(editDebtBtn.dataset.id);
+      return;
+    }
     var cobrarBtn = e.target.closest(".cobrar-btn");
     if (cobrarBtn) {
       toggleIncomeCobrado(cobrarBtn.dataset.id, document.getElementById("fijosMesSelector").value || currentMonthKey());
@@ -1949,6 +2039,13 @@
     }
   });
 
+  document.body.addEventListener("change", function (e) {
+    if (e.target.classList.contains("chk-ya-invertido-aporte")) {
+      var campo = e.target.closest(".form-aporte").querySelector(".campo-metodo-aporte");
+      campo.style.display = e.target.checked ? "none" : "";
+    }
+  });
+
   document.body.addEventListener("submit", function (e) {
     var formMov = e.target.closest(".form-movimiento-deuda");
     if (formMov) {
@@ -1969,7 +2066,8 @@
       var invId = formAporte.dataset.investId;
       var inv = state.investments.find(function (x) { return x.id === invId; });
       if (inv) {
-        var metodo = formAporte.metodoPago.value;
+        var yaInvertidoAporte = formAporte.querySelector(".chk-ya-invertido-aporte").checked;
+        var metodo = yaInvertidoAporte ? "previo" : formAporte.metodoPago.value;
         var fecha = formAporte.fecha.value, monto = parseFloat(formAporte.monto.value) || 0;
         var debtMovId = isCardMethod(metodo) ? pushCargoToDebt(metodo, fecha, "Aporte: " + inv.nombre, monto) : null;
         inv.aportes.push({ id: genId(), fecha: fecha, monto: monto, metodoPago: metodo, debtMovId: debtMovId });
@@ -2289,8 +2387,9 @@
         '<form class="inline form-aporte" data-invest-id="' + x.id + '" style="margin-top:12px">' +
           '<div class="field"><label>Fecha</label><input type="date" name="fecha" value="' + todayStr() + '" required></div>' +
           '<div class="field"><label>Monto aporte</label><input type="number" name="monto" step="0.01" min="0" placeholder="0.00" required></div>' +
-          '<div class="field"><label>Método de pago</label><select name="metodoPago" class="metodo-select">' + metodoPagoOptionsHtml(x.metodoPago) + '</select></div>' +
+          '<div class="field campo-metodo-aporte"><label>Método de pago</label><select name="metodoPago" class="metodo-select">' + metodoPagoOptionsHtml(x.metodoPago) + '</select></div>' +
           '<button class="btn secondary small" type="submit">+ Agregar aporte manual</button>' +
+          '<label class="checkbox-line" style="width:100%;margin-top:2px"><input type="checkbox" class="chk-ya-invertido-aporte"> Ya lo tenía desde antes (no descuenta mi saldo)</label>' +
         '</form>' +
         '<form class="inline form-valor-actual" data-invest-id="' + x.id + '" style="margin-top:10px">' +
           '<div class="field"><label>Actualizar valor actual</label><input type="number" name="valorActual" step="0.01" min="0" value="' + (x.valorActual != null ? x.valorActual : "") + '" placeholder="0.00" required></div>' +
@@ -2310,10 +2409,12 @@
       var saldo = debtSaldo(d);
       var pctUso = linea > 0 ? (saldo / linea * 100) : null;
       var expanded = !!expandedDebts[d.id];
+      var diaPagoCell = d.diaPago ? '<span class="tag card">📅 Día ' + d.diaPago + '</span>' : "—";
       var mainRow = "<tr><td>" + escapeHtml(d.nombre) + "</td><td>" + (linea > 0 ? fmtCur(linea, d.moneda) : "—") +
         '</td><td class="amount neg">' + fmtCur(saldo, d.moneda) + "</td><td>" + (pctUso !== null ? pctUso.toFixed(1) + "%" : "—") +
-        "</td><td>" + (d.tasa != null ? Number(d.tasa).toFixed(2) + "%" : "—") +
-        '</td><td style="white-space:nowrap"><button class="btn secondary small toggle-movimientos" data-id="' + d.id + '">' + (expanded ? "Ocultar" : "Movimientos (" + d.movimientos.length + ")") + '</button> ' +
+        "</td><td>" + (d.tasa != null ? Number(d.tasa).toFixed(2) + "%" : "—") + "</td><td>" + diaPagoCell +
+        '</td><td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap"><button class="btn secondary small toggle-movimientos" data-id="' + d.id + '">' + (expanded ? "Ocultar" : "Movimientos (" + d.movimientos.length + ")") + '</button> ' +
+        '<button class="btn secondary small edit-debt-btn" data-id="' + d.id + '">✎</button>' +
         '<button class="del-btn" data-list="debts" data-id="' + d.id + '">✕</button></td></tr>';
 
       if (!expanded) return mainRow;
@@ -2325,7 +2426,7 @@
           '</td><td><button class="del-btn del-movimiento-btn" data-debt-id="' + d.id + '" data-mov-id="' + m.id + '">✕</button></td></tr>';
       }).join("");
 
-      var detailRow = '<tr><td colspan="6"><div class="aportes-panel">' +
+      var detailRow = '<tr><td colspan="7"><div class="aportes-panel">' +
         '<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th></th></tr></thead><tbody>' + movRows + '</tbody></table>' +
         '<form class="inline form-movimiento-deuda" data-debt-id="' + d.id + '" style="margin-top:12px">' +
           '<div class="field"><label>Fecha</label><input type="date" name="fecha" value="' + todayStr() + '" required></div>' +
