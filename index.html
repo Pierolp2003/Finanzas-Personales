@@ -49,9 +49,10 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 16px;
-    flex-wrap: wrap;
+    gap: 12px;
+    flex-wrap: nowrap;
   }
+  .header-top > div:first-child { min-width: 0; flex: 1 1 auto; }
 
   header h1 { margin: 0; font-size: 1.4rem; }
 
@@ -61,7 +62,13 @@
     font-size: 0.85rem;
   }
 
-  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar { display: flex; gap: 8px; flex-shrink: 0; }
+  .icon-btn {
+    padding: 8px 11px;
+    font-size: 1.15rem;
+    line-height: 1;
+    min-width: 0;
+  }
 
   nav { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -496,8 +503,8 @@
       <div class="session-badge"><span id="sessionEmail"></span><button class="btn secondary small" id="btnLogout" type="button">Cerrar sesión</button></div>
     </div>
     <div class="toolbar">
-      <button class="btn secondary" id="btnExport">⭳ Exportar datos</button>
-      <label class="btn secondary" for="inputImport">⭱ Importar datos</label>
+      <button class="btn secondary icon-btn" id="btnExport" title="Exportar datos" aria-label="Exportar datos">⭳</button>
+      <label class="btn secondary icon-btn" for="inputImport" title="Importar datos" aria-label="Importar datos">⭱</label>
       <input type="file" id="inputImport" accept="application/json" style="display:none">
     </div>
   </div>
