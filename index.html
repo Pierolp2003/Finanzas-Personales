@@ -1,0 +1,2164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mis Finanzas Personales</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #263449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22c55e;
+    --accent-dark: #16a34a;
+    --blue: #3b82f6;
+    --amber: #f59e0b;
+    --danger: #ef4444;
+    --border: #334155;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(1100px 500px at 12% -10%, rgba(34, 197, 94, 0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(59, 130, 246, 0.10), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  header h1 { margin: 0; font-size: 1.4rem; }
+
+  header p {
+    margin: 4px 0 16px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  nav { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  nav button, button.btn, label.btn {
+    font-family: inherit;
+  }
+
+  nav button {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  nav button:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+
+  nav button.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    border-color: var(--accent);
+    color: #052e16;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(34, 197, 94, 0.28);
+  }
+
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 28px 32px 60px;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; animation: fadeIn 0.28s ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .grid { display: grid; gap: 18px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .stats-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+
+  @media (max-width: 760px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.5);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card:hover { border-color: #3d4f6b; }
+
+  .card h2 { margin: 0 0 4px; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+
+  .card .hint {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .summary-line {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 4px 0 16px;
+  }
+  .summary-line b { color: var(--text); }
+
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: 0 8px 20px -14px rgba(0, 0, 0, 0.6);
+    transition: transform 0.15s ease, border-left-color 0.15s ease;
+  }
+  .stat:hover { transform: translateY(-2px); }
+
+  .stat .label {
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .stat .value { font-size: 1.35rem; font-weight: 700; margin-top: 6px; }
+  .stat .value .sep { color: var(--muted); font-weight: 400; font-size: 1rem; margin: 0 4px; }
+
+  .stat.income { border-left-color: var(--accent); }
+  .stat.expense { border-left-color: var(--danger); }
+  .stat.balance { border-left-color: var(--blue); }
+  .stat.invest { border-left-color: var(--amber); }
+
+  .stat.income .value { color: var(--accent); }
+  .stat.expense .value { color: var(--danger); }
+  .stat.balance .value { color: var(--blue); }
+  .stat.invest .value { color: var(--amber); }
+
+  .hero {
+    background: linear-gradient(135deg, #16321f, var(--panel) 65%);
+    border: 1px solid var(--accent-dark);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 220px; height: 220px;
+    background: radial-gradient(circle, rgba(34, 197, 94, 0.25), transparent 70%);
+    pointer-events: none;
+  }
+  .hero .hero-value { font-size: 2rem; font-weight: 700; color: var(--accent); margin-top: 6px; }
+  .hero .hero-value .sep { color: var(--muted); font-weight: 400; font-size: 1.2rem; margin: 0 8px; }
+
+  form.inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); }
+
+  .field input, .field select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    min-width: 130px;
+  }
+  .field select.moneda-select { min-width: 110px; }
+  .field select.metodo-select { min-width: 160px; }
+
+  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+
+  button.btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    color: #052e16;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  }
+  button.btn:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 6px 16px -6px rgba(34, 197, 94, 0.5); }
+  button.btn:active { transform: translateY(0); }
+
+  button.btn.secondary, label.btn.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 500;
+    box-shadow: none;
+  }
+  button.btn.secondary:hover { border-color: var(--accent); box-shadow: none; filter: none; }
+  button.btn.small { padding: 6px 12px; font-size: 0.78rem; }
+
+  details.guide {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px 22px;
+    margin-bottom: 18px;
+    box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.5);
+  }
+  details.guide summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 16px 0;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+  }
+  details.guide summary::-webkit-details-marker { display: none; }
+  details.guide summary::after {
+    content: "▾";
+    margin-left: auto;
+    color: var(--muted);
+    transition: transform 0.2s ease;
+  }
+  details.guide[open] summary::after { transform: rotate(180deg); }
+  details.guide .guide-body { padding-bottom: 18px; font-size: 0.85rem; color: var(--muted); }
+  details.guide .guide-body h4 { color: var(--text); font-size: 0.85rem; margin: 14px 0 4px; }
+  details.guide .guide-body h4:first-child { margin-top: 0; }
+  details.guide .guide-body p { margin: 0 0 6px; line-height: 1.5; }
+  details.guide .guide-body b { color: var(--text); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.02em; }
+
+  td.amount { font-variant-numeric: tabular-nums; }
+  td.amount.pos { color: var(--accent); }
+  td.amount.neg { color: var(--danger); }
+  td.muted { color: var(--muted); }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+  }
+  .tag.card { border-color: var(--amber); color: var(--amber); }
+
+  .del-btn { background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 0.9rem; }
+
+  .empty { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 18px; }
+
+  .section-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .currency-block { margin-bottom: 18px; }
+  .currency-block:last-child { margin-bottom: 0; }
+  .currency-block h3 {
+    margin: 0 0 10px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  /* Donut chart */
+  .chart-row { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+
+  .donut-wrap { position: relative; width: 170px; height: 170px; flex-shrink: 0; margin: 0 auto; }
+  .donut { width: 100%; height: 100%; border-radius: 50%; }
+  .donut-hole {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 64%; height: 64%;
+    background: var(--panel);
+    border-radius: 50%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .donut-hole .small { color: var(--muted); font-size: 0.68rem; }
+  .donut-hole .big { font-weight: 700; font-size: 0.95rem; margin-top: 2px; }
+
+  .legend { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px; }
+  .legend-item {
+    display: grid;
+    grid-template-columns: 12px 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.83rem;
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-label { color: var(--text); }
+  .legend-value { font-variant-numeric: tabular-nums; }
+  .legend-pct { color: var(--muted); width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .trend-legend { display: flex; gap: 18px; margin-bottom: 6px; font-size: 0.8rem; color: var(--muted); }
+  .trend-legend .legend-item { display: inline-grid; grid-template-columns: 10px auto; }
+
+  .aportes-panel {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 6px 0 4px;
+  }
+  .aportes-panel table { font-size: 0.8rem; }
+  .aportes-panel .empty { padding: 8px; }
+
+  .checkbox-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 10px;
+    cursor: pointer;
+  }
+
+  footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 20px; }
+
+  .center-screen {
+    max-width: 440px;
+    margin: 10vh auto 0;
+    padding: 32px;
+  }
+  .center-screen form.inline { flex-direction: column; align-items: stretch; }
+  .center-screen .field input { width: 100%; }
+  .center-screen .btn-row { display: flex; gap: 10px; margin-top: 4px; }
+  .center-screen .btn-row .btn { flex: 1; }
+  .auth-status { min-height: 1.2em; }
+  .auth-status.error { color: var(--danger); }
+  .auth-status.ok { color: var(--accent); }
+
+  .session-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin: 80px auto;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="loadingScreen" class="spinner"></div>
+
+<div id="authScreen" class="card center-screen" style="display:none">
+  <h2>🔐 Mis Finanzas Personales</h2>
+  <p class="hint">Inicia sesión para que tus datos se guarden en la nube y se sincronicen entre tus dispositivos.</p>
+  <form class="inline" id="formAuth">
+    <div class="field"><label>Correo</label><input type="email" name="email" required autocomplete="email"></div>
+    <div class="field"><label>Contraseña</label><input type="password" name="password" required minlength="6" autocomplete="current-password"></div>
+    <div class="btn-row">
+      <button type="button" class="btn" id="btnLogin">Iniciar sesión</button>
+      <button type="button" class="btn secondary" id="btnSignup">Crear cuenta</button>
+    </div>
+  </form>
+  <p class="hint auth-status" id="authStatus"></p>
+</div>
+
+<div id="syncChoiceScreen" class="card center-screen" style="display:none">
+  <h2>☁️ Encontramos datos en la nube</h2>
+  <p class="hint">Ya hay información guardada en esta cuenta (de otro dispositivo o sesión). ¿Qué quieres hacer?</p>
+  <div class="btn-row">
+    <button class="btn" id="btnUseCloud">Usar los datos de la nube</button>
+    <button class="btn secondary" id="btnUseLocal">Usar los de este navegador</button>
+  </div>
+  <p class="hint" style="margin-top:12px">Elige "nube" si ya usaste la app antes con esta cuenta. Elige "este navegador" solo si esta vez tiene información más reciente o completa. La opción que no elijas se reemplaza.</p>
+</div>
+
+<div id="appRoot" style="display:none">
+
+<header>
+  <div class="header-top">
+    <div>
+      <h1>Mis Finanzas Personales</h1>
+      <p style="margin-bottom:6px">Sincronizado en la nube.</p>
+      <div class="session-badge"><span id="sessionEmail"></span><button class="btn secondary small" id="btnLogout" type="button">Cerrar sesión</button></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn secondary" id="btnExport">⭳ Exportar datos</button>
+      <label class="btn secondary" for="inputImport">⭱ Importar datos</label>
+      <input type="file" id="inputImport" accept="application/json" style="display:none">
+    </div>
+  </div>
+  <nav id="tabNav">
+    <button data-tab="resumen" class="active">🏠 Resumen</button>
+    <button data-tab="fijos">💵 Ingresos y Gastos Fijos</button>
+    <button data-tab="movimientos">🧾 Movimientos Diarios</button>
+    <button data-tab="inversiones">📈 Inversiones</button>
+    <button data-tab="deudas">💳 Deudas</button>
+    <button data-tab="mensual">📊 Resumen Mensual</button>
+  </nav>
+</header>
+
+<main>
+
+  <details class="guide">
+    <summary>📘 Guía rápida — cómo funciona todo esto</summary>
+    <div class="guide-body">
+      <h4>💰 Saldo Actual (caja)</h4>
+      <p>Es tu dinero disponible <b>de verdad</b>: tu saldo inicial + todo lo que pagas en <b>efectivo, Yape o débito</b>. Lo que pagas con tarjeta NO lo mueve — eso queda en Deudas hasta que pagues esa tarjeta.</p>
+
+      <h4>✅ Cobrar / Pagar (Ingresos y Gastos Fijos)</h4>
+      <p>Tu sueldo y tus gastos fijos se registran <b>una sola vez</b> y se repiten cada mes solos. Pero tu Saldo Actual solo se mueve cuando confirmas con el botón <b>💰 Cobrar</b> o <b>💸 Pagar</b> — así el saldo refleja lo que ya pasó, no lo que "debería" pasar. Si tu sueldo llega en varias partes (ej. dos quincenas), regístralas como ingresos fijos separados y confirma cada una en su fecha.</p>
+
+      <h4>💳 Método de pago y Deudas</h4>
+      <p>En Movimientos, Gastos Fijos e Inversiones puedes elegir con qué pagas. Si eliges una tarjeta (aparecen las que registraste en <b>Deudas</b>), el monto se suma solo como cargo a esa tarjeta y no toca tu saldo. Si eliges Efectivo/Yape/Débito, sí se descuenta del saldo al instante.</p>
+
+      <h4>📈 Inversiones</h4>
+      <p><b>Valor actual</b> es opcional — si no lo vas a revisar en años (AFP, un fondo a largo plazo), déjalo vacío. Si aportas un monto fijo cada mes, defínelo como "Aporte mensual" y confírmalo con un clic cuando lo hagas, igual que tu sueldo.</p>
+
+      <h4>💱 Soles y Dólares</h4>
+      <p>Cada registro tiene su propia moneda. Los totales muestran ambas por separado (nunca se mezclan ni se convierten) para no asumir un tipo de cambio.</p>
+
+      <h4>📊 Resumen vs. Resumen Mensual</h4>
+      <p><b>Resumen</b> = tu caja real, solo lo confirmado. <b>Resumen Mensual</b> = tu proyección de presupuesto, incluye todo (efectivo y tarjeta) sin importar si ya lo confirmaste, para que veas tu patrón de gasto completo.</p>
+    </div>
+  </details>
+
+  <!-- RESUMEN -->
+  <section id="tab-resumen" class="tab-panel active">
+    <div class="card hero">
+      <div class="section-row">
+        <div>
+          <div class="hint" style="margin:0">Saldo actual (caja)</div>
+          <div class="hero-value" id="saldoActualValue"></div>
+          <p class="hint" style="margin:8px 0 0;max-width:520px">Tu saldo inicial más todo lo que has pagado en <b>efectivo, Yape o débito</b>. Lo que pagas con tarjeta no lo toca — eso se suma en Deudas hasta que pagues la tarjeta.</p>
+        </div>
+        <button class="btn secondary small" id="btnAjustarSaldo" type="button">✎ Ajustar saldo inicial</button>
+      </div>
+      <form class="inline" id="formSaldoInicial" style="display:none;margin-top:14px">
+        <div class="field"><label>Saldo inicial S/</label><input type="number" step="0.01" name="saldoPEN" placeholder="0.00"></div>
+        <div class="field"><label>Saldo inicial US$</label><input type="number" step="0.01" name="saldoUSD" placeholder="0.00"></div>
+        <button type="submit" class="btn small">Guardar</button>
+        <button type="button" class="btn secondary small" id="btnCancelarSaldo">Cancelar</button>
+      </form>
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <p class="hint" id="cobrosEstadoInfo" style="margin:0"></p>
+      </div>
+    </div>
+
+    <p class="hint" id="resumenStatsHint" style="margin:0 0 10px"></p>
+    <div class="grid stats-grid" id="resumenStats"></div>
+    <p class="hint" id="resumenTarjetaInfo" style="margin:10px 0 0"></p>
+
+    <div class="card" style="margin-top:18px">
+      <h2>📂 Gastos por categoría — este mes</h2>
+      <p class="hint" id="resumenMonthLabel"></p>
+      <div id="resumenDonut"></div>
+    </div>
+  </section>
+
+  <!-- FIJOS -->
+  <section id="tab-fijos" class="tab-panel">
+    <div class="card" style="margin-bottom:12px">
+      <div class="section-row" style="margin-bottom:0">
+        <p class="hint" style="margin:0;max-width:640px">Cada sueldo/gasto fijo se confirma <b>individualmente</b> cuando de verdad lo cobras o pagas — así puedes tener, por ejemplo, "Sueldo 1ra quincena" y "Sueldo 2da quincena" como dos ingresos separados y marcarlos en fechas distintas.</p>
+        <div class="field"><label>Mes a confirmar</label><input type="month" id="fijosMesSelector"></div>
+      </div>
+    </div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h2>💵 Ingresos Fijos Mensuales</h2>
+        <p class="hint">Sueldo, pensión u otro ingreso recurrente. Si es un ingreso bruto, calculamos el descuento de AFP automáticamente.</p>
+        <form class="inline" id="formIngresoFijo">
+          <div class="field">
+            <label>Concepto</label>
+            <input type="text" name="concepto" placeholder="Sueldo" required>
+          </div>
+          <div class="field">
+            <label>Tipo de ingreso</label>
+            <select name="tipoIngreso" id="ingresoTipoSelect">
+              <option value="bruto">Bruto (con descuento AFP)</option>
+              <option value="neto">Neto (ya sin descuentos)</option>
+            </select>
+          </div>
+          <div class="field" id="campoMontoNeto" style="display:none">
+            <label>Monto (S/)</label>
+            <input type="number" name="monto" step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div class="field" id="campoMontoBruto">
+            <label>Monto bruto</label>
+            <input type="number" name="bruto" step="0.01" min="0" placeholder="0.00" required>
+          </div>
+          <div class="field">
+            <label>Moneda</label>
+            <select name="moneda" class="moneda-select">
+              <option value="PEN">S/ Soles</option>
+              <option value="USD">US$ Dólares</option>
+            </select>
+          </div>
+          <div class="field" id="campoAfp">
+            <label>AFP</label>
+            <select name="afp">
+              <option>AFP Profuturo</option>
+              <option>AFP Integra</option>
+              <option>AFP Prima</option>
+              <option>AFP Hábitat</option>
+              <option>ONP</option>
+              <option>Ninguno</option>
+            </select>
+          </div>
+          <div class="field" id="campoTasa">
+            <label>% Descuento</label>
+            <input type="number" name="tasa" step="0.01" min="0" max="100" value="13">
+          </div>
+          <button type="submit" class="btn" id="btnIngresoSubmit">Agregar</button>
+          <button type="button" class="btn secondary" id="btnIngresoCancelar" style="display:none">Cancelar</button>
+        </form>
+        <p class="hint" style="margin:10px 0 0">El % de descuento varía según tu AFP y comisión (flujo/mixta) — ajústalo según tu boleta de pago. Usa <b>✎ Editar</b> en la tabla para corregir un ingreso ya registrado.</p>
+        <p class="hint" id="afpActualInfo" style="margin:4px 0 0"></p>
+        <div class="summary-line" id="ingresosFijosResumen"></div>
+        <table style="margin-top:6px">
+          <thead><tr><th>Concepto</th><th>Bruto</th><th>AFP</th><th>Desc. %</th><th>Descuento</th><th>Neto</th><th></th></tr></thead>
+          <tbody id="tblIngresosFijos"></tbody>
+        </table>
+        <div class="empty" id="emptyIngresosFijos" style="display:none">Aún no registras ingresos fijos.</div>
+      </div>
+
+      <div class="card">
+        <h2>💸 Gastos Fijos Mensuales</h2>
+        <p class="hint">Ej: alquiler, servicios, suscripciones, seguros. Indica con qué lo pagas — si eliges una tarjeta, se sumará como cargo a esa deuda en vez de descontarse de tu saldo.</p>
+        <form class="inline" id="formGastoFijo">
+          <div class="field">
+            <label>Concepto</label>
+            <input type="text" name="concepto" placeholder="Alquiler" required>
+          </div>
+          <div class="field">
+            <label>Monto</label>
+            <input type="number" name="monto" step="0.01" min="0" placeholder="0.00" required>
+          </div>
+          <div class="field">
+            <label>Moneda</label>
+            <select name="moneda" class="moneda-select">
+              <option value="PEN">S/ Soles</option>
+              <option value="USD">US$ Dólares</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Día de pago (opcional)</label>
+            <input type="number" name="diaPago" min="1" max="31" placeholder="15">
+          </div>
+          <div class="field">
+            <label>Método de pago</label>
+            <select name="metodoPago" id="gastoFijoMetodoPago" class="metodo-select"></select>
+          </div>
+          <button type="submit" class="btn">Agregar</button>
+        </form>
+        <table style="margin-top:16px">
+          <thead><tr><th>Concepto</th><th>Monto</th><th>Método</th><th></th></tr></thead>
+          <tbody id="tblGastosFijos"></tbody>
+        </table>
+        <div class="empty" id="emptyGastosFijos" style="display:none">Aún no registras gastos fijos.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOVIMIENTOS -->
+  <section id="tab-movimientos" class="tab-panel">
+    <div class="card">
+      <h2>🧾 Registrar movimiento variable</h2>
+      <p class="hint">Ingresos y gastos del día a día. En un gasto, indica con qué pagaste — si es tarjeta, se suma a esa deuda y no toca tu saldo en efectivo.</p>
+      <form class="inline" id="formMovimiento">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" name="fecha" required>
+        </div>
+        <div class="field">
+          <label>Tipo</label>
+          <select name="tipo" id="movTipo">
+            <option value="gasto">Gasto</option>
+            <option value="ingreso">Ingreso</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Categoría</label>
+          <select name="categoria" id="movCategoria"></select>
+        </div>
+        <div class="field">
+          <label>Concepto</label>
+          <input type="text" name="concepto" placeholder="Almuerzo, taxi..." required>
+        </div>
+        <div class="field">
+          <label>Monto</label>
+          <input type="number" name="monto" step="0.01" min="0" placeholder="0.00" required>
+        </div>
+        <div class="field">
+          <label>Moneda</label>
+          <select name="moneda" class="moneda-select">
+            <option value="PEN">S/ Soles</option>
+            <option value="USD">US$ Dólares</option>
+          </select>
+        </div>
+        <div class="field" id="campoMetodoPago">
+          <label>Método de pago</label>
+          <select name="metodoPago" id="movMetodoPago" class="metodo-select"></select>
+        </div>
+        <button type="submit" class="btn">Registrar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="section-row">
+        <h2 style="margin:0">📜 Historial de movimientos</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="field">
+            <label>Tipo</label>
+            <select id="filtroTipo">
+              <option value="todos">Todos</option>
+              <option value="ingreso">Ingresos</option>
+              <option value="gasto">Gastos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Filtrar por mes</label>
+            <input type="month" id="filtroMes">
+          </div>
+        </div>
+      </div>
+      <div class="summary-line" id="movimientosResumen"></div>
+      <table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Concepto</th><th>Método</th><th>Monto</th><th></th></tr></thead>
+        <tbody id="tblMovimientos"></tbody>
+      </table>
+      <div class="empty" id="emptyMovimientos" style="display:none">No hay movimientos registrados para este mes.</div>
+    </div>
+  </section>
+
+  <!-- INVERSIONES -->
+  <section id="tab-inversiones" class="tab-panel">
+    <div class="card">
+      <h2>📈 Registrar inversión</h2>
+      <p class="hint">Bolsa de valores, seguro con retorno, cuenta de ahorros, CTS, etc. Indica cuánto ya tienes invertido y con qué lo pagas — si es tarjeta (ej. un seguro que se cobra por tu tarjeta CMR), se sumará como cargo a esa deuda.</p>
+      <form class="inline" id="formInversion">
+        <div class="field">
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="bolsa">Bolsa de Valores</option>
+            <option value="seguro">Seguro con Retorno</option>
+            <option value="ahorro">Cuenta de Ahorros</option>
+            <option value="cts">CTS</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Nombre</label>
+          <input type="text" name="nombre" placeholder="Ej: Acciones BCP, AFP..." required>
+        </div>
+        <div class="field">
+          <label>Moneda</label>
+          <select name="moneda" class="moneda-select">
+            <option value="PEN">S/ Soles</option>
+            <option value="USD">US$ Dólares</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" name="fecha" required>
+        </div>
+        <div class="field">
+          <label>Monto ya invertido</label>
+          <input type="number" name="montoInvertido" step="0.01" min="0" placeholder="0.00" required>
+        </div>
+        <div class="field">
+          <label>Valor actual (opcional)</label>
+          <input type="number" name="valorActual" step="0.01" min="0" placeholder="Si no lo sabes, déjalo vacío">
+        </div>
+        <div class="field">
+          <label>Aporte mensual (opcional)</label>
+          <input type="number" name="aporteMensual" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Método de pago</label>
+          <select name="metodoPago" id="inversionMetodoPago" class="metodo-select"></select>
+        </div>
+        <button type="submit" class="btn">Agregar</button>
+      </form>
+      <p class="hint" style="margin:10px 0 0"><b>Valor actual</b> es opcional — si es una inversión que no vas a revisar en años (AFP, un fondo a largo plazo), déjalo vacío y complétalo cuando lo consultes. Si defines un <b>aporte mensual</b>, cada mes verás un botón para confirmarlo, igual que tu sueldo. El método de pago se usa también para ese aporte mensual automático.</p>
+    </div>
+
+    <div class="grid stats-grid" id="inversionStats"></div>
+
+    <div class="card">
+      <h2>🥧 Distribución de tu portafolio</h2>
+      <div id="inversionDonut"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-row">
+        <h2 style="margin:0">📋 Mis inversiones</h2>
+        <div class="field"><label>Mes a confirmar aporte</label><input type="month" id="inversionesMesSelector"></div>
+      </div>
+      <table>
+        <thead><tr><th>Tipo</th><th>Nombre</th><th>Inicio</th><th>Invertido</th><th>Valor actual</th><th>Ganancia</th><th></th></tr></thead>
+        <tbody id="tblInversiones"></tbody>
+      </table>
+      <div class="empty" id="emptyInversiones" style="display:none">Aún no registras inversiones.</div>
+      <p class="hint" id="inversionesValorNota" style="margin:10px 0 0"></p>
+    </div>
+  </section>
+
+  <!-- DEUDAS -->
+  <section id="tab-deudas" class="tab-panel">
+    <div class="card">
+      <h2>💳 Registrar tarjeta o deuda</h2>
+      <p class="hint">Tu pasivo corriente: tarjetas de crédito y otras deudas de corto plazo. La "deuda actual" es tu punto de partida — luego podrás agregar cada cargo y cada pago por separado, y otras partes de la app (gastos, gastos fijos, inversiones) pueden sumar cargos aquí automáticamente si eliges esta tarjeta como método de pago.</p>
+      <form class="inline" id="formDeuda">
+        <div class="field">
+          <label>Nombre</label>
+          <input type="text" name="nombre" placeholder="Tarjeta BCP Visa" required>
+        </div>
+        <div class="field">
+          <label>Moneda</label>
+          <select name="moneda" class="moneda-select">
+            <option value="PEN">S/ Soles</option>
+            <option value="USD">US$ Dólares</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Línea de crédito</label>
+          <input type="number" name="lineaCredito" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Deuda actual (punto de partida)</label>
+          <input type="number" name="saldo" step="0.01" min="0" placeholder="0.00" required>
+        </div>
+        <div class="field">
+          <label>Tasa de interés % (opcional)</label>
+          <input type="number" name="tasa" step="0.01" min="0" placeholder="0.00">
+        </div>
+        <button type="submit" class="btn">Agregar</button>
+      </form>
+    </div>
+
+    <div class="grid stats-grid" id="deudaStats"></div>
+
+    <div class="card">
+      <h2>📋 Mis tarjetas y deudas</h2>
+      <p class="hint">Cada tarjeta tiene su propia moneda. Usa "Movimientos" para desglosar cada cargo (compra) y cada pago que hagas — incluye los que se agregan automáticamente desde Gastos, Gastos Fijos e Inversiones.</p>
+      <table>
+        <thead><tr><th>Nombre</th><th>Línea de crédito</th><th>Deuda actual</th><th>% Uso</th><th>Tasa</th><th></th></tr></thead>
+        <tbody id="tblDeudas"></tbody>
+      </table>
+      <div class="empty" id="emptyDeudas" style="display:none">No tienes tarjetas ni deudas registradas. ¡Bien ahí!</div>
+    </div>
+  </section>
+
+  <!-- MENSUAL -->
+  <section id="tab-mensual" class="tab-panel">
+    <div class="card">
+      <div class="section-row">
+        <h2 style="margin:0">📊 Resumen del mes</h2>
+        <div class="field">
+          <label>Mes</label>
+          <input type="month" id="mensualMes">
+        </div>
+      </div>
+      <p class="hint" style="margin:0 0 12px">Esta es tu <b>proyección</b>: incluye todo tu gasto (efectivo y tarjeta) sin importar si ya lo confirmaste. Para ver solo tu caja real, revisa el Resumen.</p>
+      <div class="grid stats-grid" id="mensualStats"></div>
+      <div class="summary-line" id="mensualDesglose"></div>
+      <label class="checkbox-line">
+        <input type="checkbox" id="chkPresupuesto">
+        Mostrar sugerencia de presupuesto (regla 50/30/20) — solo como referencia, no se aplica automáticamente
+      </label>
+      <div id="presupuestoSugerido" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h2>📂 Gastos por categoría</h2>
+      <p class="hint">Incluye gastos fijos y variables del mes seleccionado, con cualquier método de pago.</p>
+      <div id="mensualDonut"></div>
+    </div>
+
+    <div class="card">
+      <h2>📉 Tendencia — últimos 6 meses</h2>
+      <div class="trend-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>Ingresos</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>Gastos</span>
+      </div>
+      <div id="mensualTendencia"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>Mis Finanzas Personales — datos sincronizados en la nube y guardados localmente en este navegador como respaldo</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "finanzas_personales_v1";
+  var EXPENSE_CATEGORIES = ["Alimentación","Transporte","Vivienda","Servicios","Salud","Educación","Entretenimiento","Ropa","Otros"];
+  var INCOME_CATEGORIES = ["Sueldo Extra","Freelance","Bono","Venta","Regalo","Otros"];
+  var INVEST_LABELS = { bolsa: "Bolsa de Valores", seguro: "Seguro con Retorno", ahorro: "Cuenta de Ahorros", cts: "CTS", otro: "Otro" };
+  var PALETTE = ["#22c55e","#3b82f6","#f59e0b","#ef4444","#a855f7","#14b8a6","#eab308","#ec4899","#84cc16","#6366f1"];
+  var CURRENCIES = ["PEN", "USD"];
+  var CURRENCY_SYMBOL = { PEN: "S/", USD: "US$" };
+  var CURRENCY_LABEL = { PEN: "Soles", USD: "Dólares" };
+  var NECESIDADES_CATS = ["Vivienda", "Servicios", "Alimentación", "Transporte", "Salud", "Educación", "Gastos Fijos"];
+  var DESEOS_CATS = ["Entretenimiento", "Ropa", "Otros"];
+  var METODO_LABELS = { efectivo: "Efectivo", yape: "Yape", debito: "Débito" };
+
+  var expandedInvestments = {};
+  var expandedDebts = {};
+  var editingIncomeId = null;
+
+  // ---------- Helpers ----------
+  function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+  function fmtCur(n, moneda) {
+    n = Number(n) || 0;
+    var symbol = CURRENCY_SYMBOL[moneda] || "S/";
+    return symbol + " " + n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function emptyBucket() { return { PEN: 0, USD: 0 }; }
+  function addToBucket(bucket, moneda, amount) {
+    var c = CURRENCY_SYMBOL[moneda] ? moneda : "PEN";
+    bucket[c] = (bucket[c] || 0) + amount;
+    return bucket;
+  }
+  function fmtBucket(bucket) {
+    var parts = [];
+    CURRENCIES.forEach(function (c) { if (bucket[c]) parts.push(fmtCur(bucket[c], c)); });
+    if (!parts.length) return fmtCur(0, "PEN");
+    return parts.map(function (p) { return '<span>' + p + '</span>'; }).join('<span class="sep">+</span>');
+  }
+  function bucketHasAny(bucket) { return CURRENCIES.some(function (c) { return bucket[c]; }); }
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function currentMonthKey() { return todayStr().slice(0, 7); }
+  function monthKeyOf(dateStr) { return (dateStr || "").slice(0, 7); }
+
+  function monthLabel(monthKey) {
+    var parts = monthKey.split("-");
+    var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+    var label = d.toLocaleDateString("es-PE", { month: "long", year: "numeric" });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---------- Método de pago helpers ----------
+  function isCardMethod(m) { return typeof m === "string" && m.indexOf("debt:") === 0; }
+  function isCashMethod(m) { return !isCardMethod(m || "efectivo"); }
+  function methodDebtId(m) { return isCardMethod(m) ? m.slice(5) : null; }
+  function metodoPagoLabel(m) {
+    if (!m || METODO_LABELS[m]) return METODO_LABELS[m] || "Efectivo";
+    if (isCardMethod(m)) {
+      var d = state.debts.find(function (x) { return x.id === methodDebtId(m); });
+      return d ? d.nombre : "Tarjeta (eliminada)";
+    }
+    return "Efectivo";
+  }
+  function metodoPagoOptionsHtml(selected) {
+    var opts = [["efectivo", "Efectivo"], ["yape", "Yape"], ["debito", "Débito"]];
+    var html = opts.map(function (o) { return '<option value="' + o[0] + '"' + (selected === o[0] ? " selected" : "") + ">" + o[1] + "</option>"; }).join("");
+    state.debts.forEach(function (d) {
+      var val = "debt:" + d.id;
+      html += '<option value="' + val + '"' + (selected === val ? " selected" : "") + ">Tarjeta: " + escapeHtml(d.nombre) + "</option>";
+    });
+    return html;
+  }
+  function refreshMetodoPagoSelect(select) {
+    if (!select) return;
+    var current = select.value || "efectivo";
+    select.innerHTML = metodoPagoOptionsHtml(current);
+  }
+  function pushCargoToDebt(metodoPago, fecha, concepto, monto) {
+    if (!isCardMethod(metodoPago)) return null;
+    var debt = state.debts.find(function (d) { return d.id === methodDebtId(metodoPago); });
+    if (!debt) return null;
+    var mov = { id: genId(), fecha: fecha, tipo: "cargo", concepto: concepto, monto: monto };
+    debt.movimientos.push(mov);
+    return mov.id;
+  }
+  function removeDebtMov(debtId, movId) {
+    if (!debtId || !movId) return;
+    var debt = state.debts.find(function (d) { return d.id === debtId; });
+    if (debt) debt.movimientos = debt.movimientos.filter(function (m) { return m.id !== movId; });
+  }
+
+  // ---------- State ----------
+  function normalizeState(raw) {
+    var s = raw && typeof raw === "object" ? raw : {};
+    var fixedIncomes = (s.fixedIncomes || []).map(function (x) {
+      var moneda = x.moneda || "PEN";
+      var cobros = x.cobros || [];
+      if (x.tipoIngreso) return Object.assign({}, x, { moneda: moneda, cobros: cobros });
+      return { id: x.id || genId(), concepto: x.concepto, tipoIngreso: "neto", monto: Number(x.monto) || 0, moneda: moneda, cobros: cobros };
+    });
+    var fixedExpenses = (s.fixedExpenses || []).map(function (x) {
+      var pagos = (x.pagos || []).map(function (p) { return typeof p === "string" ? { mes: p, movId: null } : p; });
+      return Object.assign({ moneda: "PEN", metodoPago: "efectivo", diaPago: null }, x, { pagos: pagos });
+    });
+    var transactions = (s.transactions || []).map(function (x) { return Object.assign({ moneda: "PEN", metodoPago: "efectivo", debtMovId: null }, x); });
+    var investments = (s.investments || []).map(function (x) {
+      if (x.aportes) {
+        var aportes = x.aportes.map(function (a) { return Object.assign({ metodoPago: "efectivo", debtMovId: null }, a); });
+        return Object.assign({ moneda: "PEN", valorActual: null, aporteMensual: null, aportesMensuales: [], metodoPago: "efectivo" }, x, { aportes: aportes });
+      }
+      return {
+        id: x.id || genId(), tipo: x.tipo, nombre: x.nombre, moneda: x.moneda || "PEN",
+        fechaInicio: x.fecha || todayStr(),
+        valorActual: x.valorActual != null ? Number(x.valorActual) : null,
+        aporteMensual: null, aportesMensuales: [], metodoPago: "efectivo",
+        aportes: [{ id: genId(), fecha: x.fecha || todayStr(), monto: Number(x.montoInvertido) || 0, metodoPago: "efectivo", debtMovId: null }]
+      };
+    });
+    var debts = (s.debts || []).map(function (x) {
+      if (x.movimientos) return Object.assign({ moneda: "PEN" }, x);
+      return {
+        id: x.id || genId(), nombre: x.nombre, moneda: x.moneda || "PEN",
+        lineaCredito: Number(x.lineaCredito) || 0, tasa: x.tasa != null ? x.tasa : null,
+        movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: Number(x.saldo) || 0 }]
+      };
+    });
+    var settings = s.settings || {};
+    return {
+      fixedIncomes: fixedIncomes,
+      fixedExpenses: fixedExpenses,
+      transactions: transactions,
+      investments: investments,
+      debts: debts,
+      settings: {
+        afp: settings.afp || "AFP Profuturo",
+        tasaAfp: settings.tasaAfp != null ? settings.tasaAfp : 13,
+        saldoInicial: { PEN: (settings.saldoInicial && settings.saldoInicial.PEN) || 0, USD: (settings.saldoInicial && settings.saldoInicial.USD) || 0 }
+      }
+    };
+  }
+
+  function loadState() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return normalizeState(JSON.parse(raw));
+    } catch (e) {}
+    return normalizeState(null);
+  }
+
+  var state = loadState();
+
+  function saveState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    pushToCloud();
+  }
+
+  // ---------- Cloud sync (Supabase) ----------
+  var SUPABASE_URL = "https://edjjmxhzllnbzmcivfia.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_nG--LdX-mM6Q8mYBZ5aIcA__R9BAbJR";
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  var currentSession = null;
+  var pushTimer = null;
+  var cloudStatusEl = null;
+
+  function pushToCloud() {
+    if (!currentSession) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function () {
+      sb.from("finanzas_state").upsert({ user_id: currentSession.user.id, data: state, updated_at: new Date().toISOString() })
+        .then(function (res) {
+          if (res.error) console.error("Error guardando en la nube:", res.error.message);
+        });
+    }, 500);
+  }
+
+  function isStateEmpty(s) {
+    return s.fixedIncomes.length === 0 && s.fixedExpenses.length === 0 && s.transactions.length === 0 &&
+      s.investments.length === 0 && s.debts.length === 0 &&
+      !s.settings.saldoInicial.PEN && !s.settings.saldoInicial.USD;
+  }
+
+  function showScreen(id) {
+    ["loadingScreen", "authScreen", "syncChoiceScreen", "appRoot"].forEach(function (s) {
+      document.getElementById(s).style.display = s === id ? (s === "appRoot" ? "block" : "") : "none";
+    });
+  }
+
+  function startApp() {
+    document.getElementById("sessionEmail").textContent = currentSession.user.email;
+    document.getElementById("formMovimiento").fecha.value = todayStr();
+    document.getElementById("formInversion").fecha.value = todayStr();
+    document.getElementById("filtroMes").value = currentMonthKey();
+    document.getElementById("mensualMes").value = currentMonthKey();
+    document.getElementById("fijosMesSelector").value = currentMonthKey();
+    document.getElementById("inversionesMesSelector").value = currentMonthKey();
+    applyAfpDefaults();
+    renderAll();
+    showScreen("appRoot");
+  }
+
+  function resolveSync(localState, cloudState) {
+    if (!cloudState) {
+      state = localState;
+      pushToCloud();
+      startApp();
+      return;
+    }
+    var cloudNormalized = normalizeState(cloudState);
+    if (isStateEmpty(localState) || JSON.stringify(localState) === JSON.stringify(cloudNormalized)) {
+      state = cloudNormalized;
+      saveState();
+      startApp();
+      return;
+    }
+    showScreen("syncChoiceScreen");
+    document.getElementById("btnUseCloud").onclick = function () {
+      state = cloudNormalized;
+      saveState();
+      startApp();
+    };
+    document.getElementById("btnUseLocal").onclick = function () {
+      state = localState;
+      pushToCloud();
+      startApp();
+    };
+  }
+
+  function onAuthed(session) {
+    currentSession = session;
+    showScreen("loadingScreen");
+    sb.from("finanzas_state").select("data").eq("user_id", session.user.id).maybeSingle()
+      .then(function (res) {
+        if (res.error) {
+          document.getElementById("authStatus").textContent = "";
+          resolveSync(state, null);
+          return;
+        }
+        resolveSync(state, res.data ? res.data.data : null);
+      })
+      .catch(function () { resolveSync(state, null); });
+  }
+
+  function setAuthStatus(msg, cls) {
+    var el = document.getElementById("authStatus");
+    el.textContent = msg || "";
+    el.className = "hint auth-status" + (cls ? " " + cls : "");
+  }
+
+  var AUTH_ERROR_TRANSLATIONS = [
+    [/email not confirmed/i, "Debes confirmar tu correo antes de iniciar sesión — revisa tu bandeja de entrada (y spam)."],
+    [/invalid login credentials/i, "Correo o contraseña incorrectos."],
+    [/user already registered/i, "Ya existe una cuenta con ese correo. Intenta iniciar sesión."],
+    [/password should be at least/i, "La contraseña debe tener al menos 6 caracteres."],
+    [/unable to validate email address/i, "Ese correo no parece válido."],
+    [/network/i, "No se pudo conectar a la nube. Revisa tu conexión a internet."]
+  ];
+  function translateAuthError(msg) {
+    for (var i = 0; i < AUTH_ERROR_TRANSLATIONS.length; i++) {
+      if (AUTH_ERROR_TRANSLATIONS[i][0].test(msg)) return AUTH_ERROR_TRANSLATIONS[i][1];
+    }
+    return msg;
+  }
+
+  document.getElementById("btnLogin").addEventListener("click", function () {
+    var f = document.getElementById("formAuth");
+    if (!f.email.value || !f.password.value) { setAuthStatus("Completa correo y contraseña.", "error"); return; }
+    setAuthStatus("Ingresando…");
+    sb.auth.signInWithPassword({ email: f.email.value, password: f.password.value }).then(function (res) {
+      if (res.error) { setAuthStatus(translateAuthError(res.error.message), "error"); return; }
+      setAuthStatus("");
+      onAuthed(res.data.session);
+    });
+  });
+
+  document.getElementById("btnSignup").addEventListener("click", function () {
+    var f = document.getElementById("formAuth");
+    if (!f.email.value || !f.password.value) { setAuthStatus("Completa correo y contraseña.", "error"); return; }
+    setAuthStatus("Creando cuenta…");
+    sb.auth.signUp({ email: f.email.value, password: f.password.value }).then(function (res) {
+      if (res.error) { setAuthStatus(translateAuthError(res.error.message), "error"); return; }
+      if (res.data.session) { setAuthStatus(""); onAuthed(res.data.session); return; }
+      setAuthStatus("Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.", "ok");
+    });
+  });
+
+  document.getElementById("btnLogout").addEventListener("click", function () {
+    sb.auth.signOut().then(function () {
+      currentSession = null;
+      document.getElementById("formAuth").reset();
+      setAuthStatus("");
+      showScreen("authScreen");
+    });
+  });
+
+  sb.auth.getSession().then(function (res) {
+    if (res.data.session) onAuthed(res.data.session);
+    else showScreen("authScreen");
+  });
+
+  // ---------- Derived data (bucketed by currency) ----------
+  function fixedIncomeNeto(x) { return x.tipoIngreso === "bruto" ? (Number(x.bruto) - Number(x.bruto) * Number(x.tasa) / 100) : Number(x.monto); }
+  function fixedIncomeDescuento(x) { return x.tipoIngreso === "bruto" ? Number(x.bruto) * Number(x.tasa) / 100 : 0; }
+
+  function totalFixedIncome() {
+    var b = emptyBucket();
+    state.fixedIncomes.forEach(function (x) { addToBucket(b, x.moneda, fixedIncomeNeto(x)); });
+    return b;
+  }
+  function totalFixedIncomeBruto() {
+    var b = emptyBucket();
+    state.fixedIncomes.filter(function (x) { return x.tipoIngreso === "bruto"; }).forEach(function (x) { addToBucket(b, x.moneda, Number(x.bruto)); });
+    return b;
+  }
+  function totalAfpDescuento() {
+    var b = emptyBucket();
+    state.fixedIncomes.forEach(function (x) { addToBucket(b, x.moneda, fixedIncomeDescuento(x)); });
+    return b;
+  }
+  function totalFixedExpense() {
+    var b = emptyBucket();
+    state.fixedExpenses.forEach(function (x) { addToBucket(b, x.moneda, Number(x.monto)); });
+    return b;
+  }
+
+  function transactionsForMonth(monthKey) { return state.transactions.filter(function (t) { return monthKeyOf(t.fecha) === monthKey; }); }
+  function variableIncomeForMonth(monthKey) {
+    var b = emptyBucket();
+    transactionsForMonth(monthKey).filter(function (t) { return t.tipo === "ingreso"; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    return b;
+  }
+  function variableExpenseForMonth(monthKey) {
+    var b = emptyBucket();
+    transactionsForMonth(monthKey).filter(function (t) { return t.tipo === "gasto"; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    return b;
+  }
+  function variableIncomeAllTime() {
+    var b = emptyBucket();
+    state.transactions.filter(function (t) { return t.tipo === "ingreso"; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    return b;
+  }
+  function variableExpenseCashAllTime() {
+    var b = emptyBucket();
+    state.transactions.filter(function (t) { return t.tipo === "gasto" && isCashMethod(t.metodoPago); }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    return b;
+  }
+  function isIncomeCobrado(x, mk) { return (x.cobros || []).indexOf(mk) > -1; }
+  function isExpensePagado(x, mk) { return (x.pagos || []).some(function (p) { return p.mes === mk; }); }
+  function toggleIncomeCobrado(id, mk) {
+    var x = state.fixedIncomes.find(function (i) { return i.id === id; });
+    if (!x) return;
+    x.cobros = x.cobros || [];
+    var idx = x.cobros.indexOf(mk);
+    if (idx > -1) x.cobros.splice(idx, 1); else x.cobros.push(mk);
+    saveState();
+    renderAll();
+  }
+  function toggleExpensePagado(id, mk) {
+    var x = state.fixedExpenses.find(function (i) { return i.id === id; });
+    if (!x) return;
+    x.pagos = x.pagos || [];
+    var existingIdx = x.pagos.findIndex(function (p) { return p.mes === mk; });
+    if (existingIdx > -1) {
+      var existing = x.pagos[existingIdx];
+      if (existing.movId) removeDebtMov(methodDebtId(x.metodoPago), existing.movId);
+      x.pagos.splice(existingIdx, 1);
+    } else {
+      var movId = null;
+      if (isCardMethod(x.metodoPago)) {
+        var dia = x.diaPago ? String(x.diaPago).padStart(2, "0") : "01";
+        movId = pushCargoToDebt(x.metodoPago, mk + "-" + dia, x.concepto, Number(x.monto));
+      }
+      x.pagos.push({ mes: mk, movId: movId });
+    }
+    saveState();
+    renderAll();
+  }
+  function totalFixedIncomeForMonth(mk) {
+    var b = emptyBucket();
+    state.fixedIncomes.forEach(function (x) { if (isIncomeCobrado(x, mk)) addToBucket(b, x.moneda, fixedIncomeNeto(x)); });
+    return b;
+  }
+  function totalFixedExpenseCashForMonth(mk) {
+    var b = emptyBucket();
+    state.fixedExpenses.forEach(function (x) { if (isExpensePagado(x, mk) && isCashMethod(x.metodoPago)) addToBucket(b, x.moneda, Number(x.monto)); });
+    return b;
+  }
+  function totalFixedExpenseCardForMonth(mk) {
+    var b = emptyBucket();
+    state.fixedExpenses.forEach(function (x) { if (isExpensePagado(x, mk) && isCardMethod(x.metodoPago)) addToBucket(b, x.moneda, Number(x.monto)); });
+    return b;
+  }
+  function totalAfpDescuentoForMonth(mk) {
+    var b = emptyBucket();
+    state.fixedIncomes.forEach(function (x) { if (isIncomeCobrado(x, mk)) addToBucket(b, x.moneda, fixedIncomeDescuento(x)); });
+    return b;
+  }
+  function investmentCashOutflowAllTime() {
+    var b = emptyBucket();
+    state.investments.forEach(function (inv) {
+      inv.aportes.forEach(function (a) { if (isCashMethod(a.metodoPago)) addToBucket(b, inv.moneda, Number(a.monto)); });
+    });
+    return b;
+  }
+  function saldoActual() {
+    var ingresos = variableIncomeAllTime(), gastosCash = variableExpenseCashAllTime();
+    var fijoIngresoConf = emptyBucket(), fijoGastoConf = emptyBucket();
+    state.fixedIncomes.forEach(function (x) { addToBucket(fijoIngresoConf, x.moneda, fixedIncomeNeto(x) * (x.cobros || []).length); });
+    state.fixedExpenses.forEach(function (x) {
+      if (isCashMethod(x.metodoPago)) addToBucket(fijoGastoConf, x.moneda, Number(x.monto) * (x.pagos || []).length);
+    });
+    var inversionCash = investmentCashOutflowAllTime();
+    var b = emptyBucket();
+    CURRENCIES.forEach(function (c) {
+      b[c] = Number(state.settings.saldoInicial[c] || 0) + (ingresos[c] || 0) - (gastosCash[c] || 0) + (fijoIngresoConf[c] || 0) - (fijoGastoConf[c] || 0) - (inversionCash[c] || 0);
+    });
+    return b;
+  }
+  function totalCardExpenseForMonth(mk) {
+    var b = emptyBucket();
+    transactionsForMonth(mk).filter(function (t) { return t.tipo === "gasto" && isCardMethod(t.metodoPago); }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    var fijoCard = totalFixedExpenseCardForMonth(mk);
+    CURRENCIES.forEach(function (c) { if (fijoCard[c]) addToBucket(b, c, fijoCard[c]); });
+    return b;
+  }
+  function categoryTotalsForMonth(monthKey, fixedExpenseBucket, cashOnly) {
+    var byCurrency = { PEN: {}, USD: {} };
+    transactionsForMonth(monthKey).filter(function (t) { return t.tipo === "gasto" && (!cashOnly || isCashMethod(t.metodoPago)); }).forEach(function (t) {
+      var c = byCurrency[t.moneda] || byCurrency.PEN;
+      c[t.categoria] = (c[t.categoria] || 0) + Number(t.monto);
+    });
+    if (fixedExpenseBucket) {
+      CURRENCIES.forEach(function (c) { if (fixedExpenseBucket[c] > 0) byCurrency[c]["Gastos Fijos"] = (byCurrency[c]["Gastos Fijos"] || 0) + fixedExpenseBucket[c]; });
+    }
+    return byCurrency;
+  }
+
+  function investTotalInvertido(inv) { return inv.aportes.reduce(function (s, a) { return s + Number(a.monto); }, 0); }
+  function investHasValorActual(inv) { return inv.valorActual != null; }
+  function investGanancia(inv) { return investHasValorActual(inv) ? (Number(inv.valorActual) - investTotalInvertido(inv)) : null; }
+  function totalInvested() {
+    var b = emptyBucket();
+    state.investments.forEach(function (inv) { addToBucket(b, inv.moneda, investTotalInvertido(inv)); });
+    return b;
+  }
+  function totalCurrentValue() {
+    var b = emptyBucket();
+    state.investments.filter(investHasValorActual).forEach(function (inv) { addToBucket(b, inv.moneda, Number(inv.valorActual)); });
+    return b;
+  }
+  function totalInvertidoConValor() {
+    var b = emptyBucket();
+    state.investments.filter(investHasValorActual).forEach(function (inv) { addToBucket(b, inv.moneda, investTotalInvertido(inv)); });
+    return b;
+  }
+  function investTypeTotals() {
+    var byCurrency = { PEN: {}, USD: {} };
+    state.investments.forEach(function (inv) {
+      var label = INVEST_LABELS[inv.tipo] || inv.tipo;
+      var c = byCurrency[inv.moneda] || byCurrency.PEN;
+      c[label] = (c[label] || 0) + investTotalInvertido(inv);
+    });
+    return byCurrency;
+  }
+  function isAporteMensualConfirmado(inv, mk) { return (inv.aportesMensuales || []).some(function (a) { return a.mes === mk; }); }
+  function toggleAporteMensual(invId, mk) {
+    var inv = state.investments.find(function (x) { return x.id === invId; });
+    if (!inv || !inv.aporteMensual) return;
+    inv.aportesMensuales = inv.aportesMensuales || [];
+    var existing = inv.aportesMensuales.find(function (a) { return a.mes === mk; });
+    if (existing) {
+      var aporte = inv.aportes.find(function (a) { return a.id === existing.aporteId; });
+      if (aporte && aporte.debtMovId) removeDebtMov(methodDebtId(aporte.metodoPago), aporte.debtMovId);
+      inv.aportes = inv.aportes.filter(function (a) { return a.id !== existing.aporteId; });
+      inv.aportesMensuales = inv.aportesMensuales.filter(function (a) { return a.mes !== mk; });
+    } else {
+      var debtMovId = isCardMethod(inv.metodoPago) ? pushCargoToDebt(inv.metodoPago, mk + "-01", "Aporte mensual: " + inv.nombre, Number(inv.aporteMensual)) : null;
+      var newAporte = { id: genId(), fecha: mk + "-01", monto: Number(inv.aporteMensual), metodoPago: inv.metodoPago, debtMovId: debtMovId };
+      inv.aportes.push(newAporte);
+      inv.aportesMensuales.push({ mes: mk, aporteId: newAporte.id });
+      expandedInvestments[invId] = true;
+    }
+    saveState();
+    renderAll();
+  }
+
+  function debtSaldo(d) {
+    return d.movimientos.reduce(function (s, m) { return s + (m.tipo === "pago" ? -Number(m.monto) : Number(m.monto)); }, 0);
+  }
+  function totalDebt() {
+    var b = emptyBucket();
+    state.debts.forEach(function (d) { addToBucket(b, d.moneda, debtSaldo(d)); });
+    return b;
+  }
+  function totalCreditLine() {
+    var b = emptyBucket();
+    state.debts.forEach(function (d) { addToBucket(b, d.moneda, Number(d.lineaCredito) || 0); });
+    return b;
+  }
+  function netWorth() {
+    var invested = totalInvested(), debt = totalDebt(), b = emptyBucket();
+    CURRENCIES.forEach(function (c) { b[c] = (invested[c] || 0) - (debt[c] || 0); });
+    return b;
+  }
+
+  // ---------- Charts ----------
+  function buildDonutHTML(entriesObj, totalLabel, moneda) {
+    var entries = Object.keys(entriesObj).map(function (k) { return [k, entriesObj[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
+    var total = entries.reduce(function (s, e) { return s + e[1]; }, 0);
+    if (total <= 0) return "";
+    var cum = 0;
+    var stops = [];
+    var legendItems = entries.map(function (e, i) {
+      var pct = e[1] / total * 100;
+      var color = PALETTE[i % PALETTE.length];
+      stops.push(color + " " + cum.toFixed(2) + "% " + (cum + pct).toFixed(2) + "%");
+      cum += pct;
+      return '<div class="legend-item"><span class="legend-dot" style="background:' + color + '"></span>' +
+        '<span class="legend-label">' + escapeHtml(e[0]) + '</span>' +
+        '<span class="legend-value">' + fmtCur(e[1], moneda) + '</span>' +
+        '<span class="legend-pct">' + pct.toFixed(1) + '%</span></div>';
+    }).join("");
+    var gradient = "conic-gradient(" + stops.join(", ") + ")";
+    return '<div class="chart-row">' +
+      '<div class="donut-wrap"><div class="donut" style="background:' + gradient + '"></div>' +
+      '<div class="donut-hole"><div class="small">' + totalLabel + '</div><div class="big">' + fmtCur(total, moneda) + '</div></div></div>' +
+      '<div class="legend">' + legendItems + '</div></div>';
+  }
+
+  function renderCurrencyDonuts(byCurrencyEntries, emptyMsg, totalLabel) {
+    var blocks = [];
+    CURRENCIES.forEach(function (c) {
+      var html = buildDonutHTML(byCurrencyEntries[c] || {}, totalLabel, c);
+      if (html) blocks.push('<div class="currency-block"><h3>' + CURRENCY_LABEL[c] + '</h3>' + html + '</div>');
+    });
+    if (!blocks.length) return '<div class="empty">' + emptyMsg + "</div>";
+    return blocks.join("");
+  }
+
+  function buildTrendSVG(months, ingresos, gastos, moneda) {
+    var w = 640, h = 200, padL = 14, padR = 14, padT = 12, padB = 26;
+    var innerW = w - padL - padR, innerH = h - padT - padB;
+    var max = Math.max.apply(null, ingresos.concat(gastos).concat([1]));
+    function coords(arr) {
+      return arr.map(function (v, i) {
+        var x = padL + (i / (arr.length - 1 || 1)) * innerW;
+        var y = padT + innerH - (v / max * innerH);
+        return { x: x, y: y, v: v };
+      });
+    }
+    function polyline(arr, color) {
+      var pts = coords(arr).map(function (p) { return p.x.toFixed(1) + "," + p.y.toFixed(1); }).join(" ");
+      return '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2.5"/>';
+    }
+    function dots(arr, color) {
+      return coords(arr).map(function (p) {
+        return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3.5" fill="' + color + '"><title>' + fmtCur(p.v, moneda) + "</title></circle>";
+      }).join("");
+    }
+    var labels = months.map(function (m, i) {
+      var x = padL + (i / (months.length - 1 || 1)) * innerW;
+      var parts = m.split("-");
+      var shortLabel = parts[1] + "/" + parts[0].slice(2);
+      return '<text x="' + x.toFixed(1) + '" y="' + (h - 6) + '" font-size="10" text-anchor="middle" style="fill:var(--muted)">' + shortLabel + "</text>";
+    }).join("");
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" preserveAspectRatio="xMidYMid meet">' +
+      '<line x1="' + padL + '" y1="' + (padT + innerH) + '" x2="' + (w - padR) + '" y2="' + (padT + innerH) + '" style="stroke:var(--border)" stroke-width="1"/>' +
+      polyline(ingresos, "#22c55e") + polyline(gastos, "#ef4444") +
+      dots(ingresos, "#22c55e") + dots(gastos, "#ef4444") +
+      labels + "</svg>";
+  }
+
+  // ---------- Tabs ----------
+  document.getElementById("tabNav").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-tab]");
+    if (!btn) return;
+    document.querySelectorAll("nav button").forEach(function (b) { b.classList.remove("active"); });
+    document.querySelectorAll(".tab-panel").forEach(function (p) { p.classList.remove("active"); });
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+  });
+
+  // ---------- Category select population ----------
+  function populateCategorySelect(tipo) {
+    var sel = document.getElementById("movCategoria");
+    var cats = tipo === "ingreso" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    sel.innerHTML = cats.map(function (c) { return '<option value="' + c + '">' + c + "</option>"; }).join("");
+  }
+  function updateMovFormMode() {
+    var tipo = document.getElementById("movTipo").value;
+    document.getElementById("campoMetodoPago").style.display = tipo === "gasto" ? "" : "none";
+  }
+  document.getElementById("movTipo").addEventListener("change", function (e) { populateCategorySelect(e.target.value); updateMovFormMode(); });
+  populateCategorySelect("gasto");
+  updateMovFormMode();
+
+  // ---------- Ingreso Fijo: bruto/neto toggle ----------
+  function updateIngresoFijoFormMode() {
+    var tipo = document.getElementById("ingresoTipoSelect").value;
+    var campoMontoNeto = document.getElementById("campoMontoNeto");
+    var campoMontoBruto = document.getElementById("campoMontoBruto");
+    var campoAfp = document.getElementById("campoAfp");
+    var campoTasa = document.getElementById("campoTasa");
+    var inputNeto = campoMontoNeto.querySelector("input");
+    var inputBruto = campoMontoBruto.querySelector("input");
+    var esBruto = tipo === "bruto";
+    campoMontoNeto.style.display = esBruto ? "none" : "";
+    campoMontoBruto.style.display = esBruto ? "" : "none";
+    campoAfp.style.display = esBruto ? "" : "none";
+    campoTasa.style.display = esBruto ? "" : "none";
+    inputNeto.required = !esBruto;
+    inputBruto.required = esBruto;
+  }
+  document.getElementById("ingresoTipoSelect").addEventListener("change", updateIngresoFijoFormMode);
+  updateIngresoFijoFormMode();
+
+  // ---------- Ingreso Fijo: edición ----------
+  function applyAfpDefaults() {
+    var f = document.getElementById("formIngresoFijo");
+    f.afp.value = state.settings.afp;
+    f.tasa.value = state.settings.tasaAfp;
+  }
+
+  function resetIncomeForm() {
+    var f = document.getElementById("formIngresoFijo");
+    f.reset();
+    editingIncomeId = null;
+    document.getElementById("btnIngresoSubmit").textContent = "Agregar";
+    document.getElementById("btnIngresoCancelar").style.display = "none";
+    updateIngresoFijoFormMode();
+    applyAfpDefaults();
+  }
+
+  function startEditIncome(id) {
+    var x = state.fixedIncomes.find(function (i) { return i.id === id; });
+    if (!x) return;
+    var f = document.getElementById("formIngresoFijo");
+    f.concepto.value = x.concepto;
+    f.tipoIngreso.value = x.tipoIngreso;
+    f.moneda.value = x.moneda || "PEN";
+    updateIngresoFijoFormMode();
+    if (x.tipoIngreso === "bruto") {
+      f.bruto.value = x.bruto;
+      f.afp.value = x.afp;
+      f.tasa.value = x.tasa;
+    } else {
+      f.monto.value = x.monto;
+    }
+    editingIncomeId = id;
+    document.getElementById("btnIngresoSubmit").textContent = "Guardar cambios";
+    document.getElementById("btnIngresoCancelar").style.display = "";
+    f.concepto.focus();
+    f.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  document.getElementById("btnIngresoCancelar").addEventListener("click", resetIncomeForm);
+
+  // ---------- Forms ----------
+  document.getElementById("formIngresoFijo").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    var esBruto = f.tipoIngreso.value === "bruto";
+    var existing = editingIncomeId ? state.fixedIncomes.find(function (i) { return i.id === editingIncomeId; }) : null;
+    var entry = { id: editingIncomeId || genId(), concepto: f.concepto.value.trim(), tipoIngreso: f.tipoIngreso.value, moneda: f.moneda.value, cobros: existing ? existing.cobros : [] };
+    if (esBruto) {
+      entry.bruto = parseFloat(f.bruto.value) || 0;
+      entry.afp = f.afp.value;
+      entry.tasa = parseFloat(f.tasa.value) || 0;
+      state.settings = { afp: entry.afp, tasaAfp: entry.tasa, saldoInicial: state.settings.saldoInicial };
+    } else {
+      entry.monto = parseFloat(f.monto.value) || 0;
+    }
+    if (editingIncomeId) {
+      var idx = state.fixedIncomes.findIndex(function (i) { return i.id === editingIncomeId; });
+      if (idx > -1) state.fixedIncomes[idx] = entry;
+    } else {
+      state.fixedIncomes.push(entry);
+    }
+    resetIncomeForm();
+    saveState();
+    renderAll();
+  });
+
+  document.getElementById("formGastoFijo").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    state.fixedExpenses.push({
+      id: genId(), concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value), moneda: f.moneda.value,
+      diaPago: f.diaPago.value ? parseInt(f.diaPago.value, 10) : null,
+      metodoPago: f.metodoPago.value, pagos: []
+    });
+    f.reset();
+    saveState();
+    renderAll();
+  });
+
+  document.getElementById("formMovimiento").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    var esGasto = f.tipo.value === "gasto";
+    var metodo = esGasto ? f.metodoPago.value : "efectivo";
+    var fecha = f.fecha.value, concepto = f.concepto.value.trim(), monto = parseFloat(f.monto.value) || 0;
+    var debtMovId = esGasto && isCardMethod(metodo) ? pushCargoToDebt(metodo, fecha, concepto, monto) : null;
+    state.transactions.push({
+      id: genId(), fecha: fecha, tipo: f.tipo.value,
+      categoria: f.categoria.value, concepto: concepto, monto: monto, moneda: f.moneda.value,
+      metodoPago: metodo, debtMovId: debtMovId
+    });
+    var keepDate = f.fecha.value;
+    f.reset();
+    f.fecha.value = keepDate;
+    populateCategorySelect(f.tipo.value);
+    updateMovFormMode();
+    document.getElementById("filtroMes").value = monthKeyOf(keepDate);
+    saveState();
+    renderAll();
+  });
+
+  document.getElementById("formInversion").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    var metodo = f.metodoPago.value;
+    var fecha = f.fecha.value, nombre = f.nombre.value.trim(), montoInicial = parseFloat(f.montoInvertido.value) || 0;
+    var debtMovId = isCardMethod(metodo) ? pushCargoToDebt(metodo, fecha, nombre, montoInicial) : null;
+    state.investments.push({
+      id: genId(), tipo: f.tipo.value, nombre: nombre, moneda: f.moneda.value, fechaInicio: fecha,
+      valorActual: f.valorActual.value ? parseFloat(f.valorActual.value) : null,
+      aporteMensual: f.aporteMensual.value ? parseFloat(f.aporteMensual.value) : null,
+      aportesMensuales: [], metodoPago: metodo,
+      aportes: [{ id: genId(), fecha: fecha, monto: montoInicial, metodoPago: metodo, debtMovId: debtMovId }]
+    });
+    f.reset();
+    saveState();
+    renderAll();
+  });
+
+  document.getElementById("formDeuda").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    state.debts.push({
+      id: genId(), nombre: f.nombre.value.trim(), moneda: f.moneda.value,
+      lineaCredito: parseFloat(f.lineaCredito.value) || 0,
+      tasa: f.tasa.value ? parseFloat(f.tasa.value) : null,
+      movimientos: [{ id: genId(), fecha: todayStr(), tipo: "cargo", concepto: "Saldo inicial", monto: parseFloat(f.saldo.value) || 0 }]
+    });
+    f.reset();
+    saveState();
+    renderAll();
+  });
+
+  // ---------- Saldo inicial ----------
+  document.getElementById("btnAjustarSaldo").addEventListener("click", function () {
+    var form = document.getElementById("formSaldoInicial");
+    var showing = form.style.display !== "none";
+    if (!showing) {
+      form.saldoPEN.value = state.settings.saldoInicial.PEN || "";
+      form.saldoUSD.value = state.settings.saldoInicial.USD || "";
+    }
+    form.style.display = showing ? "none" : "flex";
+  });
+  document.getElementById("btnCancelarSaldo").addEventListener("click", function () {
+    document.getElementById("formSaldoInicial").style.display = "none";
+  });
+  document.getElementById("formSaldoInicial").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    state.settings.saldoInicial = { PEN: parseFloat(f.saldoPEN.value) || 0, USD: parseFloat(f.saldoUSD.value) || 0 };
+    f.parentElement.style.display = "none";
+    saveState();
+    renderAll();
+  });
+
+  document.getElementById("fijosMesSelector").addEventListener("change", renderFijos);
+  document.getElementById("inversionesMesSelector").addEventListener("change", renderInversiones);
+
+  // ---------- Export / Import ----------
+  document.getElementById("btnExport").addEventListener("click", function () {
+    var blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "finanzas-backup-" + todayStr() + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById("inputImport").addEventListener("change", function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var imported = normalizeState(JSON.parse(ev.target.result));
+        if (!confirm("Esto reemplazará todos tus datos actuales con los del archivo importado. ¿Continuar?")) return;
+        state = imported;
+        saveState();
+        renderAll();
+      } catch (err) {
+        alert("El archivo no es un respaldo válido.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  // ---------- Delegated actions ----------
+  document.body.addEventListener("click", function (e) {
+    var delBtn = e.target.closest(".del-btn");
+    if (delBtn) {
+      var list = delBtn.dataset.list, id = delBtn.dataset.id;
+      if (!confirm("¿Eliminar este registro?")) return;
+      if (list === "transactions") {
+        var tx = state.transactions.find(function (x) { return x.id === id; });
+        if (tx && tx.debtMovId) removeDebtMov(methodDebtId(tx.metodoPago), tx.debtMovId);
+      }
+      if (list === "fixedExpenses") {
+        var fe = state.fixedExpenses.find(function (x) { return x.id === id; });
+        if (fe) (fe.pagos || []).forEach(function (p) { if (p.movId) removeDebtMov(methodDebtId(fe.metodoPago), p.movId); });
+      }
+      if (list === "investments") {
+        var invDel = state.investments.find(function (x) { return x.id === id; });
+        if (invDel) invDel.aportes.forEach(function (a) { if (a.debtMovId) removeDebtMov(methodDebtId(a.metodoPago), a.debtMovId); });
+        delete expandedInvestments[id];
+      }
+      state[list] = state[list].filter(function (x) { return x.id !== id; });
+      saveState();
+      renderAll();
+      return;
+    }
+    var editIncomeBtn = e.target.closest(".edit-income-btn");
+    if (editIncomeBtn) {
+      startEditIncome(editIncomeBtn.dataset.id);
+      return;
+    }
+    var cobrarBtn = e.target.closest(".cobrar-btn");
+    if (cobrarBtn) {
+      toggleIncomeCobrado(cobrarBtn.dataset.id, document.getElementById("fijosMesSelector").value || currentMonthKey());
+      return;
+    }
+    var pagarBtn = e.target.closest(".pagar-btn");
+    if (pagarBtn) {
+      toggleExpensePagado(pagarBtn.dataset.id, document.getElementById("fijosMesSelector").value || currentMonthKey());
+      return;
+    }
+    var aporteMensualBtn = e.target.closest(".aporte-mensual-btn");
+    if (aporteMensualBtn) {
+      toggleAporteMensual(aporteMensualBtn.dataset.id, document.getElementById("inversionesMesSelector").value || currentMonthKey());
+      return;
+    }
+    var toggleBtn = e.target.closest(".toggle-aportes");
+    if (toggleBtn) {
+      var invId = toggleBtn.dataset.id;
+      expandedInvestments[invId] = !expandedInvestments[invId];
+      renderInversiones();
+      return;
+    }
+    var delAporte = e.target.closest(".del-aporte-btn");
+    if (delAporte) {
+      var invId2 = delAporte.dataset.investId, aporteId = delAporte.dataset.aporteId;
+      if (!confirm("¿Eliminar este aporte?")) return;
+      var inv = state.investments.find(function (x) { return x.id === invId2; });
+      if (inv) {
+        var aporteDel = inv.aportes.find(function (a) { return a.id === aporteId; });
+        if (aporteDel && aporteDel.debtMovId) removeDebtMov(methodDebtId(aporteDel.metodoPago), aporteDel.debtMovId);
+        inv.aportes = inv.aportes.filter(function (a) { return a.id !== aporteId; });
+        inv.aportesMensuales = (inv.aportesMensuales || []).filter(function (am) { return am.aporteId !== aporteId; });
+      }
+      saveState();
+      renderAll();
+      return;
+    }
+    var toggleMovBtn = e.target.closest(".toggle-movimientos");
+    if (toggleMovBtn) {
+      var debtId = toggleMovBtn.dataset.id;
+      expandedDebts[debtId] = !expandedDebts[debtId];
+      renderDeudas();
+      return;
+    }
+    var delMov = e.target.closest(".del-movimiento-btn");
+    if (delMov) {
+      var debtId2 = delMov.dataset.debtId, movId = delMov.dataset.movId;
+      if (!confirm("¿Eliminar este movimiento?")) return;
+      var debt = state.debts.find(function (x) { return x.id === debtId2; });
+      if (debt) debt.movimientos = debt.movimientos.filter(function (m) { return m.id !== movId; });
+      saveState();
+      renderAll();
+      return;
+    }
+  });
+
+  document.body.addEventListener("submit", function (e) {
+    var formMov = e.target.closest(".form-movimiento-deuda");
+    if (formMov) {
+      e.preventDefault();
+      var debtId3 = formMov.dataset.debtId;
+      var debt2 = state.debts.find(function (x) { return x.id === debtId3; });
+      if (debt2) {
+        debt2.movimientos.push({ id: genId(), fecha: formMov.fecha.value, tipo: formMov.tipo.value, concepto: formMov.concepto.value.trim(), monto: parseFloat(formMov.monto.value) || 0 });
+        expandedDebts[debtId3] = true;
+        saveState();
+        renderAll();
+      }
+      return;
+    }
+    var formAporte = e.target.closest(".form-aporte");
+    if (formAporte) {
+      e.preventDefault();
+      var invId = formAporte.dataset.investId;
+      var inv = state.investments.find(function (x) { return x.id === invId; });
+      if (inv) {
+        var metodo = formAporte.metodoPago.value;
+        var fecha = formAporte.fecha.value, monto = parseFloat(formAporte.monto.value) || 0;
+        var debtMovId = isCardMethod(metodo) ? pushCargoToDebt(metodo, fecha, "Aporte: " + inv.nombre, monto) : null;
+        inv.aportes.push({ id: genId(), fecha: fecha, monto: monto, metodoPago: metodo, debtMovId: debtMovId });
+        expandedInvestments[invId] = true;
+        saveState();
+        renderAll();
+      }
+      return;
+    }
+    var formValor = e.target.closest(".form-valor-actual");
+    if (formValor) {
+      e.preventDefault();
+      var invId2 = formValor.dataset.investId;
+      var inv2 = state.investments.find(function (x) { return x.id === invId2; });
+      if (inv2) {
+        inv2.valorActual = parseFloat(formValor.valorActual.value) || 0;
+        expandedInvestments[invId2] = true;
+        saveState();
+        renderInversiones();
+      }
+      return;
+    }
+  });
+
+  document.getElementById("filtroMes").addEventListener("change", renderMovimientos);
+  document.getElementById("filtroTipo").addEventListener("change", renderMovimientos);
+  document.getElementById("mensualMes").addEventListener("change", renderMensual);
+  document.getElementById("chkPresupuesto").addEventListener("change", renderMensual);
+
+  // ---------- Renderers ----------
+  function statCard(cls, label, valueHtml) {
+    return '<div class="stat ' + cls + '"><div class="label">' + label + '</div><div class="value">' + valueHtml + "</div></div>";
+  }
+
+  function renderResumen() {
+    var mk = currentMonthKey();
+    document.getElementById("resumenMonthLabel").textContent = monthLabel(mk);
+
+    document.getElementById("saldoActualValue").innerHTML = fmtBucket(saldoActual());
+
+    var incomesTotal = state.fixedIncomes.length, incomesConfirmed = state.fixedIncomes.filter(function (x) { return isIncomeCobrado(x, mk); }).length;
+    var expensesTotal = state.fixedExpenses.length, expensesConfirmed = state.fixedExpenses.filter(function (x) { return isExpensePagado(x, mk); }).length;
+    var partes = [];
+    if (incomesTotal) partes.push(incomesConfirmed + " de " + incomesTotal + " ingresos fijos cobrados");
+    if (expensesTotal) partes.push(expensesConfirmed + " de " + expensesTotal + " gastos fijos pagados");
+    document.getElementById("cobrosEstadoInfo").innerHTML = partes.length
+      ? "Este mes (" + monthLabel(mk) + "): " + partes.join(" · ") + ". Confírmalos en <b>Ingresos y Gastos Fijos</b> cuando el dinero realmente entre o salga."
+      : "Registra tus ingresos y gastos fijos en la pestaña <b>Ingresos y Gastos Fijos</b> para empezar a confirmarlos aquí.";
+
+    var ingresoFijo = totalFixedIncomeForMonth(mk);
+    var gastoFijoCash = totalFixedExpenseCashForMonth(mk);
+    var ingresoTotal = emptyBucket(), gastoTotal = emptyBucket(), balance = emptyBucket();
+    var ingresoVar = variableIncomeForMonth(mk), gastoVarCash = emptyBucket();
+    transactionsForMonth(mk).filter(function (t) { return t.tipo === "gasto" && isCashMethod(t.metodoPago); }).forEach(function (t) { addToBucket(gastoVarCash, t.moneda, Number(t.monto)); });
+    CURRENCIES.forEach(function (c) {
+      ingresoTotal[c] = (ingresoFijo[c] || 0) + (ingresoVar[c] || 0);
+      gastoTotal[c] = (gastoFijoCash[c] || 0) + (gastoVarCash[c] || 0);
+      balance[c] = ingresoTotal[c] - gastoTotal[c];
+    });
+    var invertido = totalInvested();
+    var descuentoAfp = totalAfpDescuentoForMonth(mk);
+    var deuda = totalDebt();
+    var gastoTarjeta = totalCardExpenseForMonth(mk);
+
+    document.getElementById("resumenStatsHint").innerHTML = "Estos montos solo incluyen lo pagado en <b>efectivo, Yape o débito</b> y ya confirmado — igual que tu Saldo Actual. Lo pagado con tarjeta se ve abajo y en Deudas.";
+
+    var cards = statCard("income", "Ingreso neto del mes", fmtBucket(ingresoTotal));
+    if (bucketHasAny(descuentoAfp)) cards += statCard("expense", "Descuento AFP", fmtBucket(descuentoAfp));
+    cards += statCard("expense", "Gastos del mes (efectivo)", fmtBucket(gastoTotal)) +
+      statCard("balance", "Balance", fmtBucket(balance)) +
+      statCard("invest", "Total invertido", fmtBucket(invertido));
+    if (bucketHasAny(deuda)) cards += statCard("expense", "Deuda en tarjetas", fmtBucket(deuda));
+    document.getElementById("resumenStats").innerHTML = cards;
+
+    document.getElementById("resumenTarjetaInfo").innerHTML = bucketHasAny(gastoTarjeta)
+      ? "Gastos con tarjeta este mes: <b>" + fmtBucket(gastoTarjeta) + "</b> — ya se sumaron como cargo en Deudas y no afectan tu saldo hasta que pagues la tarjeta."
+      : "";
+
+    document.getElementById("resumenDonut").innerHTML = renderCurrencyDonuts(categoryTotalsForMonth(mk, gastoFijoCash, true), "Sin gastos en efectivo registrados este mes.", "Total gastado");
+  }
+
+  function renderFijos() {
+    var selector = document.getElementById("fijosMesSelector");
+    if (!selector.value) selector.value = currentMonthKey();
+    var mk = selector.value;
+
+    refreshMetodoPagoSelect(document.getElementById("gastoFijoMetodoPago"));
+
+    var incTbody = document.getElementById("tblIngresosFijos");
+    incTbody.innerHTML = state.fixedIncomes.map(function (x) {
+      var editBtn = '<button class="btn secondary small edit-income-btn" data-id="' + x.id + '">✎</button> ';
+      var cobrado = isIncomeCobrado(x, mk);
+      var cobrarBtn = '<button class="btn small cobrar-btn' + (cobrado ? " secondary" : "") + '" data-id="' + x.id + '">' + (cobrado ? "✓ Cobrado" : "💰 Cobrar") + '</button> ';
+      var actions = '<td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">' + cobrarBtn + editBtn + '<button class="del-btn" data-list="fixedIncomes" data-id="' + x.id + '">✕</button></td>';
+      if (x.tipoIngreso === "bruto") {
+        var desc = fixedIncomeDescuento(x), neto = fixedIncomeNeto(x);
+        return "<tr><td>" + escapeHtml(x.concepto) + "</td><td>" + fmtCur(x.bruto, x.moneda) + "</td><td>" + escapeHtml(x.afp) +
+          "</td><td>" + Number(x.tasa).toFixed(2) + '%</td><td class="amount neg">' + fmtCur(desc, x.moneda) + '</td><td class="amount pos">' + fmtCur(neto, x.moneda) +
+          "</td>" + actions + "</tr>";
+      }
+      return "<tr><td>" + escapeHtml(x.concepto) + '</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="amount pos">' +
+        fmtCur(x.monto, x.moneda) + "</td>" + actions + "</tr>";
+    }).join("");
+    document.getElementById("emptyIngresosFijos").style.display = state.fixedIncomes.length ? "none" : "block";
+
+    var bruto = totalFixedIncomeBruto(), descuento = totalAfpDescuento(), neto = totalFixedIncome();
+    document.getElementById("ingresosFijosResumen").innerHTML = state.fixedIncomes.length
+      ? "<span>Ingreso bruto: <b>" + fmtBucket(bucketHasAny(bruto) ? bruto : neto) + "</b></span><span>Descuento AFP: <b>" + fmtBucket(descuento) + "</b></span><span>Ingreso neto total: <b>" + fmtBucket(neto) + "</b></span>"
+      : "";
+
+    document.getElementById("afpActualInfo").innerHTML = "AFP configurada actualmente: <b>" + escapeHtml(state.settings.afp) + "</b> (" + state.settings.tasaAfp + "% de descuento). Se usará por defecto en tu próximo ingreso bruto.";
+
+    var expTbody = document.getElementById("tblGastosFijos");
+    expTbody.innerHTML = state.fixedExpenses.map(function (x) {
+      var pagado = isExpensePagado(x, mk);
+      var pagarBtn = '<button class="btn small pagar-btn' + (pagado ? " secondary" : "") + '" data-id="' + x.id + '">' + (pagado ? "✓ Pagado" : "💸 Pagar") + '</button> ';
+      var metodoTag = '<span class="tag' + (isCardMethod(x.metodoPago) ? " card" : "") + '">' + metodoPagoLabel(x.metodoPago) + (x.diaPago ? " · día " + x.diaPago : "") + '</span>';
+      return "<tr><td>" + escapeHtml(x.concepto) + '</td><td class="amount neg">' + fmtCur(x.monto, x.moneda) + "</td><td>" + metodoTag +
+        '</td><td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">' + pagarBtn + '<button class="del-btn" data-list="fixedExpenses" data-id="' + x.id + '">✕</button></td></tr>';
+    }).join("");
+    document.getElementById("emptyGastosFijos").style.display = state.fixedExpenses.length ? "none" : "block";
+  }
+
+  function renderMovimientos() {
+    refreshMetodoPagoSelect(document.getElementById("movMetodoPago"));
+
+    var filtro = document.getElementById("filtroMes").value;
+    var filtroTipo = document.getElementById("filtroTipo").value;
+    var mesList = state.transactions.filter(function (t) { return !filtro || monthKeyOf(t.fecha) === filtro; });
+    var ingresoMes = emptyBucket(), gastoMesCash = emptyBucket(), gastoMesTarjeta = emptyBucket();
+    mesList.filter(function (t) { return t.tipo === "ingreso"; }).forEach(function (t) { addToBucket(ingresoMes, t.moneda, Number(t.monto)); });
+    mesList.filter(function (t) { return t.tipo === "gasto" && isCashMethod(t.metodoPago); }).forEach(function (t) { addToBucket(gastoMesCash, t.moneda, Number(t.monto)); });
+    mesList.filter(function (t) { return t.tipo === "gasto" && isCardMethod(t.metodoPago); }).forEach(function (t) { addToBucket(gastoMesTarjeta, t.moneda, Number(t.monto)); });
+    var neto = emptyBucket();
+    CURRENCIES.forEach(function (c) { neto[c] = (ingresoMes[c] || 0) - (gastoMesCash[c] || 0); });
+    document.getElementById("movimientosResumen").innerHTML =
+      "<span>Ingresos: <b style=\"color:var(--accent)\">" + fmtBucket(ingresoMes) + "</b></span>" +
+      "<span>Gastos en efectivo: <b style=\"color:var(--danger)\">" + fmtBucket(gastoMesCash) + "</b></span>" +
+      "<span>Gastos con tarjeta: <b>" + fmtBucket(gastoMesTarjeta) + "</b></span>" +
+      "<span>Neto (caja): <b>" + fmtBucket(neto) + "</b></span>";
+
+    var list = mesList.slice().sort(function (a, b) { return b.fecha.localeCompare(a.fecha); });
+    if (filtroTipo !== "todos") list = list.filter(function (t) { return t.tipo === filtroTipo; });
+
+    var tbody = document.getElementById("tblMovimientos");
+    tbody.innerHTML = list.map(function (t) {
+      var isIncome = t.tipo === "ingreso";
+      var metodoTag = isIncome ? "—" : '<span class="tag' + (isCardMethod(t.metodoPago) ? " card" : "") + '">' + metodoPagoLabel(t.metodoPago) + '</span>';
+      return "<tr><td>" + t.fecha + "</td><td><span class=\"tag\">" + (isIncome ? "Ingreso" : "Gasto") + "</span></td><td>" + escapeHtml(t.categoria) +
+        "</td><td>" + escapeHtml(t.concepto) + "</td><td>" + metodoTag + '</td><td class="amount ' + (isIncome ? "pos" : "neg") + '">' + fmtCur(t.monto, t.moneda) +
+        '</td><td><button class="del-btn" data-list="transactions" data-id="' + t.id + '">✕</button></td></tr>';
+    }).join("");
+    document.getElementById("emptyMovimientos").style.display = list.length ? "none" : "block";
+  }
+
+  function computeBudgetSuggestion(mk, ingresoTotal, catsPorMoneda) {
+    var rows = [];
+    CURRENCIES.forEach(function (c) {
+      var ingreso = ingresoTotal[c] || 0;
+      if (ingreso <= 0) return;
+      var cats = catsPorMoneda[c] || {};
+      var necesidadesReal = 0, deseosReal = 0;
+      Object.keys(cats).forEach(function (cat) {
+        if (NECESIDADES_CATS.indexOf(cat) > -1) necesidadesReal += cats[cat];
+        else if (DESEOS_CATS.indexOf(cat) > -1) deseosReal += cats[cat];
+      });
+      var ahorroReal = ingreso - necesidadesReal - deseosReal;
+      rows.push({ moneda: c, ingreso: ingreso, necesidadesReal: necesidadesReal, deseosReal: deseosReal, ahorroReal: ahorroReal });
+    });
+    return rows;
+  }
+
+  function renderBudgetSuggestion(mk, ingresoTotal, catsPorMoneda) {
+    var box = document.getElementById("presupuestoSugerido");
+    var show = document.getElementById("chkPresupuesto").checked;
+    box.style.display = show ? "" : "none";
+    if (!show) return;
+    var rows = computeBudgetSuggestion(mk, ingresoTotal, catsPorMoneda);
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty">Registra tus ingresos del mes para ver la sugerencia.</div>';
+      return;
+    }
+    var html = '<p class="hint" style="margin:0 0 10px">Referencia general (regla 50/30/20 de necesidades/deseos/ahorro) — ajústala a tu realidad, no es asesoría personalizada.</p>';
+    rows.forEach(function (r) {
+      html += '<h3 style="font-size:0.8rem;color:var(--muted);text-transform:uppercase;margin:10px 0 6px">' + CURRENCY_LABEL[r.moneda] + '</h3>';
+      html += '<table><thead><tr><th>Grupo</th><th>Sugerido %</th><th>Sugerido</th><th>Real %</th><th>Real</th></tr></thead><tbody>';
+      var groups = [
+        ["Necesidades (vivienda, comida, transporte, salud...)", 50, r.necesidadesReal],
+        ["Deseos (entretenimiento, ropa, otros)", 30, r.deseosReal],
+        ["Ahorro / Inversión", 20, r.ahorroReal]
+      ];
+      groups.forEach(function (g) {
+        var realPct = r.ingreso > 0 ? (g[2] / r.ingreso * 100) : 0;
+        html += "<tr><td>" + g[0] + "</td><td>" + g[1] + "%</td><td>" + fmtCur(r.ingreso * g[1] / 100, r.moneda) +
+          "</td><td>" + realPct.toFixed(1) + "%</td><td>" + fmtCur(g[2], r.moneda) + "</td></tr>";
+      });
+      html += "</tbody></table>";
+    });
+    box.innerHTML = html;
+  }
+
+  function renderMensual() {
+    var sel = document.getElementById("mensualMes");
+    var mk = sel.value || currentMonthKey();
+    if (!sel.value) sel.value = mk;
+
+    var ingresoFijo = totalFixedIncome();
+    var gastoFijo = totalFixedExpense();
+    var ingresoVar = variableIncomeForMonth(mk);
+    var gastoVar = variableExpenseForMonth(mk);
+    var ingresoTotal = emptyBucket(), gastoTotal = emptyBucket(), balance = emptyBucket(), ahorroPotencial = emptyBucket();
+    CURRENCIES.forEach(function (c) {
+      ingresoTotal[c] = (ingresoFijo[c] || 0) + (ingresoVar[c] || 0);
+      gastoTotal[c] = (gastoFijo[c] || 0) + (gastoVar[c] || 0);
+      balance[c] = ingresoTotal[c] - gastoTotal[c];
+      ahorroPotencial[c] = Math.max(balance[c], 0);
+    });
+
+    document.getElementById("mensualStats").innerHTML =
+      statCard("income", "Ingresos totales", fmtBucket(ingresoTotal)) +
+      statCard("expense", "Gastos totales", fmtBucket(gastoTotal)) +
+      statCard("balance", "Balance del mes", fmtBucket(balance)) +
+      statCard("invest", "Ahorro potencial", fmtBucket(ahorroPotencial));
+
+    document.getElementById("mensualDesglose").innerHTML =
+      "<span>Ingreso fijo: <b>" + fmtBucket(ingresoFijo) + "</b></span><span>Ingreso variable: <b>" + fmtBucket(ingresoVar) + "</b></span>" +
+      "<span>Gasto fijo: <b>" + fmtBucket(gastoFijo) + "</b></span><span>Gasto variable: <b>" + fmtBucket(gastoVar) + "</b></span>";
+
+    var catsPorMoneda = categoryTotalsForMonth(mk, gastoFijo, false);
+    document.getElementById("mensualDonut").innerHTML = renderCurrencyDonuts(catsPorMoneda, "Sin gastos registrados en " + monthLabel(mk) + ".", "Total gastado");
+
+    renderBudgetSuggestion(mk, ingresoTotal, catsPorMoneda);
+
+    var parts = mk.split("-").map(Number);
+    var months = [];
+    for (var i = 5; i >= 0; i--) {
+      var d = new Date(parts[0], parts[1] - 1 - i, 1);
+      months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"));
+    }
+    var trendHtml = "";
+    CURRENCIES.forEach(function (c) {
+      var ingresosPorMes = months.map(function (m) { return (ingresoFijo[c] || 0) + (variableIncomeForMonth(m)[c] || 0); });
+      var gastosPorMes = months.map(function (m) { return (gastoFijo[c] || 0) + (variableExpenseForMonth(m)[c] || 0); });
+      var hasData = ingresosPorMes.some(Boolean) || gastosPorMes.some(Boolean);
+      if (!hasData) return;
+      trendHtml += '<div class="currency-block"><h3>' + CURRENCY_LABEL[c] + '</h3>' + buildTrendSVG(months, ingresosPorMes, gastosPorMes, c) + '</div>';
+    });
+    document.getElementById("mensualTendencia").innerHTML = trendHtml || '<div class="empty">Sin datos suficientes todavía.</div>';
+  }
+
+  function renderInversiones() {
+    refreshMetodoPagoSelect(document.getElementById("inversionMetodoPago"));
+
+    var selector = document.getElementById("inversionesMesSelector");
+    if (!selector.value) selector.value = currentMonthKey();
+    var mk = selector.value;
+
+    var invertido = totalInvested();
+    var valorActual = totalCurrentValue();
+    var invertidoConValor = totalInvertidoConValor();
+    var ganancia = emptyBucket(), rendimiento = {};
+    CURRENCIES.forEach(function (c) {
+      ganancia[c] = (valorActual[c] || 0) - (invertidoConValor[c] || 0);
+      rendimiento[c] = invertidoConValor[c] > 0 ? (ganancia[c] / invertidoConValor[c] * 100) : null;
+    });
+    var rendimientoHtml = CURRENCIES.filter(function (c) { return rendimiento[c] != null; })
+      .map(function (c) { return '<span>' + CURRENCY_SYMBOL[c] + ': ' + rendimiento[c].toFixed(2) + '%</span>'; })
+      .join('<span class="sep">·</span>') || "—";
+    var gananciaClass = CURRENCIES.some(function (c) { return ganancia[c] < 0; }) ? "expense" : "income";
+
+    document.getElementById("inversionStats").innerHTML =
+      statCard("invest", "Total invertido", fmtBucket(invertido)) +
+      statCard("balance", "Valor actual", bucketHasAny(valorActual) ? fmtBucket(valorActual) : "—") +
+      statCard(gananciaClass, "Ganancia/Pérdida", bucketHasAny(valorActual) ? fmtBucket(ganancia) : "—") +
+      statCard(gananciaClass, "Rendimiento", rendimientoHtml);
+
+    document.getElementById("inversionDonut").innerHTML = renderCurrencyDonuts(investTypeTotals(), "Aún no registras inversiones.", "Total invertido");
+
+    var sinValor = state.investments.filter(function (x) { return !investHasValorActual(x); }).length;
+    document.getElementById("inversionesValorNota").innerHTML = sinValor
+      ? sinValor + " de " + state.investments.length + " inversiones no tienen valor actual registrado — no se incluyen en Ganancia/Rendimiento hasta que lo completes."
+      : "";
+
+    var tbody = document.getElementById("tblInversiones");
+    tbody.innerHTML = state.investments.map(function (x) {
+      var inv = investTotalInvertido(x);
+      var g = investGanancia(x);
+      var gp = (g != null && inv > 0) ? (g / inv * 100) : null;
+      var expanded = !!expandedInvestments[x.id];
+      var mainRow = "<tr><td><span class=\"tag\">" + (INVEST_LABELS[x.tipo] || x.tipo) + "</span></td><td>" + escapeHtml(x.nombre) +
+        "</td><td>" + x.fechaInicio + "</td><td>" + fmtCur(inv, x.moneda) + "</td><td>" + (investHasValorActual(x) ? fmtCur(x.valorActual, x.moneda) : "—") +
+        '</td><td class="amount ' + (g == null ? "" : (g >= 0 ? "pos" : "neg")) + '">' + (g == null ? "—" : fmtCur(g, x.moneda) + " (" + gp.toFixed(1) + "%)") +
+        '</td><td style="white-space:nowrap"><button class="btn secondary small toggle-aportes" data-id="' + x.id + '">' + (expanded ? "Ocultar" : "Aportes (" + x.aportes.length + ")") + '</button> ' +
+        '<button class="del-btn" data-list="investments" data-id="' + x.id + '">✕</button></td></tr>';
+
+      if (!expanded) return mainRow;
+
+      var aportesRows = x.aportes.slice().sort(function (a, b) { return b.fecha.localeCompare(a.fecha); }).map(function (a) {
+        var esMensual = (x.aportesMensuales || []).some(function (am) { return am.aporteId === a.id; });
+        var metodoTag = '<span class="tag' + (isCardMethod(a.metodoPago) ? " card" : "") + '">' + metodoPagoLabel(a.metodoPago) + '</span>';
+        return "<tr><td>" + a.fecha + (esMensual ? ' <span class="tag">mensual</span>' : "") + "</td><td>" + fmtCur(a.monto, x.moneda) + "</td><td>" + metodoTag + '</td><td><button class="del-btn del-aporte-btn" data-invest-id="' + x.id + '" data-aporte-id="' + a.id + '">✕</button></td></tr>';
+      }).join("");
+
+      var aporteMensualBlock = "";
+      if (x.aporteMensual) {
+        var confirmado = isAporteMensualConfirmado(x, mk);
+        aporteMensualBlock = '<div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+          '<span class="hint" style="margin:0">Aporte mensual configurado: <b>' + fmtCur(x.aporteMensual, x.moneda) + '</b> vía <b>' + metodoPagoLabel(x.metodoPago) + '</b></span>' +
+          '<button class="btn small aporte-mensual-btn' + (confirmado ? " secondary" : "") + '" data-id="' + x.id + '">' + (confirmado ? "✓ Aportado " + monthLabel(mk) : "💰 Aportar " + monthLabel(mk)) + '</button>' +
+        '</div>';
+      }
+
+      var detailRow = '<tr><td colspan="7"><div class="aportes-panel">' +
+        '<table><thead><tr><th>Fecha</th><th>Aporte</th><th>Método</th><th></th></tr></thead><tbody>' + aportesRows + '</tbody></table>' +
+        aporteMensualBlock +
+        '<form class="inline form-aporte" data-invest-id="' + x.id + '" style="margin-top:12px">' +
+          '<div class="field"><label>Fecha</label><input type="date" name="fecha" value="' + todayStr() + '" required></div>' +
+          '<div class="field"><label>Monto aporte</label><input type="number" name="monto" step="0.01" min="0" placeholder="0.00" required></div>' +
+          '<div class="field"><label>Método de pago</label><select name="metodoPago" class="metodo-select">' + metodoPagoOptionsHtml(x.metodoPago) + '</select></div>' +
+          '<button class="btn secondary small" type="submit">+ Agregar aporte manual</button>' +
+        '</form>' +
+        '<form class="inline form-valor-actual" data-invest-id="' + x.id + '" style="margin-top:10px">' +
+          '<div class="field"><label>Actualizar valor actual</label><input type="number" name="valorActual" step="0.01" min="0" value="' + (x.valorActual != null ? x.valorActual : "") + '" placeholder="0.00" required></div>' +
+          '<button class="btn secondary small" type="submit">Actualizar valor</button>' +
+        '</form>' +
+      '</div></td></tr>';
+
+      return mainRow + detailRow;
+    }).join("");
+    document.getElementById("emptyInversiones").style.display = state.investments.length ? "none" : "block";
+  }
+
+  function renderDeudas() {
+    var tbody = document.getElementById("tblDeudas");
+    tbody.innerHTML = state.debts.map(function (d) {
+      var linea = Number(d.lineaCredito) || 0;
+      var saldo = debtSaldo(d);
+      var pctUso = linea > 0 ? (saldo / linea * 100) : null;
+      var expanded = !!expandedDebts[d.id];
+      var mainRow = "<tr><td>" + escapeHtml(d.nombre) + "</td><td>" + (linea > 0 ? fmtCur(linea, d.moneda) : "—") +
+        '</td><td class="amount neg">' + fmtCur(saldo, d.moneda) + "</td><td>" + (pctUso !== null ? pctUso.toFixed(1) + "%" : "—") +
+        "</td><td>" + (d.tasa != null ? Number(d.tasa).toFixed(2) + "%" : "—") +
+        '</td><td style="white-space:nowrap"><button class="btn secondary small toggle-movimientos" data-id="' + d.id + '">' + (expanded ? "Ocultar" : "Movimientos (" + d.movimientos.length + ")") + '</button> ' +
+        '<button class="del-btn" data-list="debts" data-id="' + d.id + '">✕</button></td></tr>';
+
+      if (!expanded) return mainRow;
+
+      var movRows = d.movimientos.slice().sort(function (a, b) { return b.fecha.localeCompare(a.fecha); }).map(function (m) {
+        var esCargo = m.tipo === "cargo";
+        return "<tr><td>" + m.fecha + "</td><td><span class=\"tag\">" + (esCargo ? "Cargo" : "Pago") + "</span></td><td>" + escapeHtml(m.concepto || "") +
+          '</td><td class="amount ' + (esCargo ? "neg" : "pos") + '">' + (esCargo ? "+" : "−") + fmtCur(m.monto, d.moneda) +
+          '</td><td><button class="del-btn del-movimiento-btn" data-debt-id="' + d.id + '" data-mov-id="' + m.id + '">✕</button></td></tr>';
+      }).join("");
+
+      var detailRow = '<tr><td colspan="6"><div class="aportes-panel">' +
+        '<table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Monto</th><th></th></tr></thead><tbody>' + movRows + '</tbody></table>' +
+        '<form class="inline form-movimiento-deuda" data-debt-id="' + d.id + '" style="margin-top:12px">' +
+          '<div class="field"><label>Fecha</label><input type="date" name="fecha" value="' + todayStr() + '" required></div>' +
+          '<div class="field"><label>Tipo</label><select name="tipo"><option value="cargo">Cargo (compra)</option><option value="pago">Pago</option></select></div>' +
+          '<div class="field"><label>Concepto</label><input type="text" name="concepto" placeholder="Compra, pago mensual..."></div>' +
+          '<div class="field"><label>Monto</label><input type="number" name="monto" step="0.01" min="0" placeholder="0.00" required></div>' +
+          '<button class="btn secondary small" type="submit">+ Agregar movimiento</button>' +
+        '</form>' +
+      '</div></td></tr>';
+
+      return mainRow + detailRow;
+    }).join("");
+    document.getElementById("emptyDeudas").style.display = state.debts.length ? "none" : "block";
+
+    var deuda = totalDebt(), linea = totalCreditLine();
+    var pctGlobal = {};
+    CURRENCIES.forEach(function (c) { pctGlobal[c] = linea[c] > 0 ? (deuda[c] / linea[c] * 100) : null; });
+    var pctHtml = CURRENCIES.filter(function (c) { return pctGlobal[c] != null; })
+      .map(function (c) { return '<span>' + CURRENCY_SYMBOL[c] + ': ' + pctGlobal[c].toFixed(1) + '%</span>'; })
+      .join('<span class="sep">·</span>') || "0.0%";
+    var patrimonio = netWorth();
+    document.getElementById("deudaStats").innerHTML =
+      statCard("expense", "Deuda total en tarjetas", fmtBucket(deuda)) +
+      statCard("balance", "Línea de crédito total", fmtBucket(linea)) +
+      statCard("expense", "% de uso", pctHtml) +
+      statCard(CURRENCIES.some(function (c) { return patrimonio[c] < 0; }) ? "expense" : "income", "Patrimonio (Invertido − Deuda)", fmtBucket(patrimonio));
+  }
+
+  function renderAll() {
+    renderResumen();
+    renderFijos();
+    renderMovimientos();
+    renderMensual();
+    renderInversiones();
+    renderDeudas();
+  }
+
+})();
+</script>
+
+</body>
+</html>
