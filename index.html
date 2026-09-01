@@ -547,6 +547,9 @@
       <h4>💳 Método de pago y Deudas</h4>
       <p>En Movimientos, Gastos Fijos e Inversiones puedes elegir con qué pagas. Si eliges una tarjeta (aparecen las que registraste en <b>Deudas</b>), el monto se suma solo como cargo a esa tarjeta y no toca tu saldo. Si eliges Efectivo/Yape/Débito, sí se descuenta del saldo al instante.</p>
 
+      <h4>🧾 Fecha de facturación y de pago</h4>
+      <p>Si le pones a tu tarjeta un <b>día de facturación</b> (corte) y un <b>día de pago</b>, la app calcula en qué mes realmente vence cada cargo — no siempre es el mismo mes en que compraste. Por ejemplo: si tu tarjeta corta el día 10 y pagas el 20, una compra del día 15 recién cierra en el corte del mes siguiente, y por eso se paga ese mismo mes siguiente. Verás este desglose (este mes / próximo mes / vencido) en <b>Deudas</b>, y el <b>Resumen Mensual</b> usa esa misma fecha real de pago para calcular el balance del mes, en vez de la fecha en que hiciste la compra.</p>
+
       <h4>📈 Inversiones</h4>
       <p><b>Valor actual</b> es opcional — si no lo vas a revisar en años (AFP, un fondo a largo plazo), déjalo vacío. Si aportas un monto fijo cada mes, defínelo como "Aporte mensual" y confírmalo con un clic cuando lo hagas, igual que tu sueldo.</p>
 
@@ -912,7 +915,7 @@
           <input type="month" id="mensualMes">
         </div>
       </div>
-      <p class="hint" style="margin:0 0 12px">Esta es tu <b>proyección</b>: incluye todo tu gasto (efectivo y tarjeta) sin importar si ya lo confirmaste. Para ver solo tu caja real, revisa el Resumen.</p>
+      <p class="hint" style="margin:0 0 12px">Esta es tu <b>proyección</b>: incluye todo tu gasto (efectivo y tarjeta) sin importar si ya lo confirmaste. Los gastos con tarjeta se ubican en el mes en que realmente se pagan (según el día de facturación y de pago de esa tarjeta), no en el mes de la compra. Para ver solo tu caja real, revisa el Resumen.</p>
       <div class="grid stats-grid" id="mensualStats"></div>
       <div class="summary-line" id="mensualDesglose"></div>
       <label class="checkbox-line">
@@ -1049,6 +1052,12 @@
     return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
+  function addMonthsToKey(monthKey, delta) {
+    var parts = monthKey.split("-").map(Number);
+    var d = new Date(parts[0], parts[1] - 1 + delta, 1);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
@@ -1095,6 +1104,24 @@
     if (!debtId || !movId) return;
     var debt = state.debts.find(function (d) { return d.id === debtId; });
     if (debt) debt.movimientos = debt.movimientos.filter(function (m) { return m.id !== movId; });
+  }
+
+  // Mes en que un cargo de tarjeta realmente se paga, según día de facturación (corte) y día de pago.
+  // Si el cargo cae después del corte, pasa al siguiente ciclo; si el día de pago ya pasó dentro
+  // del mes de corte, el pago real ocurre al mes siguiente del corte.
+  function cardDueMonthKey(fecha, debt) {
+    var mk = monthKeyOf(fecha);
+    if (!debt || !debt.diaFacturacion) return mk;
+    var day = parseInt((fecha || "").slice(8, 10), 10) || 1;
+    var closingOffset = day <= debt.diaFacturacion ? 0 : 1;
+    var pagoDia = debt.diaPago != null ? debt.diaPago : debt.diaFacturacion;
+    var pagoOffset = pagoDia > debt.diaFacturacion ? 0 : 1;
+    return addMonthsToKey(mk, closingOffset + pagoOffset);
+  }
+  function transactionDueMonthKey(t) {
+    if (!isCardMethod(t.metodoPago)) return monthKeyOf(t.fecha);
+    var debt = state.debts.find(function (d) { return d.id === methodDebtId(t.metodoPago); });
+    return cardDueMonthKey(t.fecha, debt);
   }
 
   // ---------- State ----------
@@ -1346,7 +1373,7 @@
   }
   function variableExpenseForMonth(monthKey) {
     var b = emptyBucket();
-    transactionsForMonth(monthKey).filter(function (t) { return t.tipo === "gasto"; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    state.transactions.filter(function (t) { return t.tipo === "gasto" && transactionDueMonthKey(t) === monthKey; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
     return b;
   }
   function variableIncomeAllTime() {
@@ -1436,14 +1463,17 @@
   }
   function totalCardExpenseForMonth(mk) {
     var b = emptyBucket();
-    transactionsForMonth(mk).filter(function (t) { return t.tipo === "gasto" && isCardMethod(t.metodoPago); }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
+    state.transactions.filter(function (t) { return t.tipo === "gasto" && isCardMethod(t.metodoPago) && transactionDueMonthKey(t) === mk; }).forEach(function (t) { addToBucket(b, t.moneda, Number(t.monto)); });
     var fijoCard = totalFixedExpenseCardForMonth(mk);
     CURRENCIES.forEach(function (c) { if (fijoCard[c]) addToBucket(b, c, fijoCard[c]); });
     return b;
   }
   function categoryTotalsForMonth(monthKey, fixedExpenseBucket, cashOnly) {
     var byCurrency = { PEN: {}, USD: {} };
-    transactionsForMonth(monthKey).filter(function (t) { return t.tipo === "gasto" && (!cashOnly || isCashMethod(t.metodoPago)); }).forEach(function (t) {
+    state.transactions.filter(function (t) {
+      if (t.tipo !== "gasto") return false;
+      return cashOnly ? (isCashMethod(t.metodoPago) && monthKeyOf(t.fecha) === monthKey) : (transactionDueMonthKey(t) === monthKey);
+    }).forEach(function (t) {
       var c = byCurrency[t.moneda] || byCurrency.PEN;
       c[t.categoria] = (c[t.categoria] || 0) + Number(t.monto);
     });
@@ -1518,6 +1548,34 @@
   function netWorth() {
     var invested = totalInvested(), debt = totalDebt(), b = emptyBucket();
     CURRENCIES.forEach(function (c) { b[c] = (invested[c] || 0) - (debt[c] || 0); });
+    return b;
+  }
+
+  // Reparte el saldo pendiente de una tarjeta entre los meses en que realmente vence cada cargo,
+  // aplicando los pagos ya hechos contra los cargos más antiguos primero (FIFO).
+  function debtDueBreakdown(d) {
+    var cargos = d.movimientos.filter(function (m) { return m.tipo === "cargo"; })
+      .map(function (m) { return { fecha: m.fecha, monto: Number(m.monto), dueMonth: cardDueMonthKey(m.fecha, d) }; })
+      .sort(function (a, b) { return (a.dueMonth + a.fecha).localeCompare(b.dueMonth + b.fecha); });
+    var pagosRestantes = d.movimientos.filter(function (m) { return m.tipo === "pago"; }).reduce(function (s, m) { return s + Number(m.monto); }, 0);
+    var byMonth = {};
+    cargos.forEach(function (c) {
+      var restante = c.monto;
+      if (pagosRestantes > 0) {
+        var aplicado = Math.min(pagosRestantes, restante);
+        pagosRestantes -= aplicado;
+        restante -= aplicado;
+      }
+      if (restante > 0) byMonth[c.dueMonth] = (byMonth[c.dueMonth] || 0) + restante;
+    });
+    return byMonth;
+  }
+  function totalDueForMonth(mk) {
+    var b = emptyBucket();
+    state.debts.forEach(function (d) {
+      var breakdown = debtDueBreakdown(d);
+      if (breakdown[mk]) addToBucket(b, d.moneda, breakdown[mk]);
+    });
     return b;
   }
 
@@ -2494,7 +2552,27 @@
         '<button class="btn secondary small edit-debt-btn" data-id="' + d.id + '">✎</button>' +
         '<button class="del-btn" data-list="debts" data-id="' + d.id + '">✕</button></td></tr>';
 
-      if (!expanded) return mainRow;
+      var pagosRow = "";
+      if (d.diaFacturacion) {
+        var breakdown = debtDueBreakdown(d);
+        var mkActual = currentMonthKey(), mkSiguiente = addMonthsToKey(mkActual, 1);
+        var vencido = 0, actual = 0, siguiente = 0, despues = 0;
+        Object.keys(breakdown).forEach(function (bmk) {
+          if (bmk < mkActual) vencido += breakdown[bmk];
+          else if (bmk === mkActual) actual += breakdown[bmk];
+          else if (bmk === mkSiguiente) siguiente += breakdown[bmk];
+          else despues += breakdown[bmk];
+        });
+        var tags = [];
+        if (vencido > 0.005) tags.push('<span class="tag" style="border-color:var(--danger);color:var(--danger)">⚠️ Vencido: ' + fmtCur(vencido, d.moneda) + '</span>');
+        tags.push('<span class="tag">' + monthLabel(mkActual) + ': ' + fmtCur(actual, d.moneda) + '</span>');
+        tags.push('<span class="tag card">' + monthLabel(mkSiguiente) + ': ' + fmtCur(siguiente, d.moneda) + '</span>');
+        if (despues > 0.005) tags.push('<span class="tag">Después: ' + fmtCur(despues, d.moneda) + '</span>');
+        pagosRow = '<tr><td colspan="8" style="border-top:none;padding-top:0"><div class="hint" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:-6px 0 8px">' +
+          '💳 Según corte (día ' + d.diaFacturacion + ') y pago (' + (d.diaPago || "—") + '): ' + tags.join(" ") + '</div></td></tr>';
+      }
+
+      if (!expanded) return mainRow + pagosRow;
 
       var movRows = d.movimientos.slice().sort(function (a, b) { return b.fecha.localeCompare(a.fecha); }).map(function (m) {
         var esCargo = m.tipo === "cargo";
@@ -2514,7 +2592,7 @@
         '</form>' +
       '</div></td></tr>';
 
-      return mainRow + detailRow;
+      return mainRow + pagosRow + detailRow;
     }).join("");
     document.getElementById("emptyDeudas").style.display = state.debts.length ? "none" : "block";
 
@@ -2525,11 +2603,16 @@
       .map(function (c) { return '<span>' + CURRENCY_SYMBOL[c] + ': ' + pctGlobal[c].toFixed(1) + '%</span>'; })
       .join('<span class="sep">·</span>') || "0.0%";
     var patrimonio = netWorth();
+    var mkActualG = currentMonthKey();
+    var debeEsteMes = totalDueForMonth(mkActualG);
+    var debeProximoMes = totalDueForMonth(addMonthsToKey(mkActualG, 1));
     document.getElementById("deudaStats").innerHTML =
       statCard("expense", "Deuda total en tarjetas", fmtBucket(deuda)) +
       statCard("balance", "Línea de crédito total", fmtBucket(linea)) +
       statCard("expense", "% de uso", pctHtml) +
-      statCard(CURRENCIES.some(function (c) { return patrimonio[c] < 0; }) ? "expense" : "income", "Patrimonio (Invertido − Deuda)", fmtBucket(patrimonio));
+      statCard(CURRENCIES.some(function (c) { return patrimonio[c] < 0; }) ? "expense" : "income", "Patrimonio (Invertido − Deuda)", fmtBucket(patrimonio)) +
+      statCard("expense", "Por pagar este mes (" + monthLabel(mkActualG) + ")", bucketHasAny(debeEsteMes) ? fmtBucket(debeEsteMes) : fmtCur(0, "PEN")) +
+      statCard("expense", "Por pagar el próximo mes (" + monthLabel(addMonthsToKey(mkActualG, 1)) + ")", bucketHasAny(debeProximoMes) ? fmtBucket(debeProximoMes) : fmtCur(0, "PEN"));
   }
 
   function renderAll() {
