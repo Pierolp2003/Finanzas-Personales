@@ -1965,7 +1965,7 @@
   // ---------- Delegated actions ----------
   document.body.addEventListener("click", function (e) {
     var delBtn = e.target.closest(".del-btn");
-    if (delBtn) {
+    if (delBtn && delBtn.dataset.list) {
       var list = delBtn.dataset.list, id = delBtn.dataset.id;
       if (!confirm("¿Eliminar este registro?")) return;
       if (list === "transactions") {
