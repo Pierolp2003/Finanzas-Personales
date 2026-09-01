@@ -391,6 +391,71 @@
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Registro rápido (FAB + modal) */
+  .fab {
+    position: fixed;
+    bottom: 22px; right: 22px;
+    width: 58px; height: 58px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    color: #052e16;
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1;
+    border: none;
+    box-shadow: 0 10px 26px -8px rgba(34, 197, 94, 0.65);
+    cursor: pointer;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .fab:hover { transform: scale(1.06); }
+  .fab:active { transform: scale(0.94); }
+
+  .quick-add-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 60;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fadeIn 0.15s ease;
+  }
+  @media (min-width: 640px) {
+    .quick-add-overlay { align-items: center; }
+  }
+  .quick-add-sheet {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    padding: 22px;
+    width: 100%;
+    max-width: 460px;
+    max-height: 88vh;
+    overflow-y: auto;
+    box-shadow: 0 -12px 40px -10px rgba(0, 0, 0, 0.6);
+  }
+  @media (min-width: 640px) {
+    .quick-add-sheet { border-radius: 16px; margin-bottom: 40px; box-shadow: 0 20px 60px -12px rgba(0, 0, 0, 0.6); }
+  }
+  .quick-add-sheet .field { width: 100%; margin-bottom: 12px; }
+  .quick-add-sheet .field select, .quick-add-sheet .field input { width: 100%; }
+  .quick-add-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+  /* Móvil: navegación y formularios más cómodos */
+  @media (max-width: 640px) {
+    main { padding: 20px 16px 100px; }
+    header { padding: 14px 16px; }
+    nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+    nav::-webkit-scrollbar { height: 4px; }
+    nav button { flex-shrink: 0; }
+    form.inline .field { flex: 1 1 100%; }
+    form.inline .field input, form.inline .field select { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -838,6 +903,51 @@
 </main>
 
 <footer>Mis Finanzas Personales — datos sincronizados en la nube y guardados localmente en este navegador como respaldo</footer>
+
+<button class="fab" id="fabQuickAdd" type="button" title="Registrar rápido">+</button>
+
+<div class="quick-add-overlay" id="quickAddOverlay" style="display:none">
+  <div class="quick-add-sheet">
+    <div class="quick-add-header">
+      <h2 style="margin:0">⚡ Registro rápido</h2>
+      <button class="btn secondary small" id="btnQuickAddClose" type="button">✕</button>
+    </div>
+    <form id="formQuickAdd">
+      <div class="field">
+        <label>Tipo</label>
+        <select name="tipo" id="quickTipo">
+          <option value="gasto">Gasto</option>
+          <option value="ingreso">Ingreso</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Categoría</label>
+        <select name="categoria" id="quickCategoria"></select>
+      </div>
+      <div class="field">
+        <label>Concepto</label>
+        <input type="text" name="concepto" placeholder="Almuerzo, taxi..." required>
+      </div>
+      <div class="field">
+        <label>Monto</label>
+        <input type="number" name="monto" step="0.01" min="0" placeholder="0.00" required inputmode="decimal">
+      </div>
+      <div class="field">
+        <label>Moneda</label>
+        <select name="moneda" class="moneda-select">
+          <option value="PEN">S/ Soles</option>
+          <option value="USD">US$ Dólares</option>
+        </select>
+      </div>
+      <div class="field" id="quickCampoMetodoPago">
+        <label>Método de pago</label>
+        <select name="metodoPago" id="quickMetodoPago" class="metodo-select"></select>
+      </div>
+      <p class="hint" style="margin:10px 0 0">Se registra con la fecha de hoy. Para otra fecha, usa "Movimientos Diarios".</p>
+      <button type="submit" class="btn" style="width:100%;margin-top:14px">Guardar</button>
+    </form>
+  </div>
+</div>
 
 </div>
 
@@ -1435,10 +1545,11 @@
   });
 
   // ---------- Category select population ----------
-  function populateCategorySelect(tipo) {
-    var sel = document.getElementById("movCategoria");
+  function populateCategorySelect(tipo, sel) {
+    sel = sel || document.getElementById("movCategoria");
     var cats = tipo === "ingreso" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-    sel.innerHTML = cats.map(function (c) { return '<option value="' + c + '">' + c + "</option>"; }).join("");
+    var current = sel.value;
+    sel.innerHTML = cats.map(function (c) { return '<option value="' + c + '"' + (c === current ? " selected" : "") + '>' + c + "</option>"; }).join("");
   }
   function updateMovFormMode() {
     var tipo = document.getElementById("movTipo").value;
@@ -1447,6 +1558,20 @@
   document.getElementById("movTipo").addEventListener("change", function (e) { populateCategorySelect(e.target.value); updateMovFormMode(); });
   populateCategorySelect("gasto");
   updateMovFormMode();
+
+  // ---------- Registrar movimiento (compartido entre el formulario y el acceso rápido) ----------
+  function registrarMovimiento(datos) {
+    var esGasto = datos.tipo === "gasto";
+    var metodo = esGasto ? datos.metodoPago : "efectivo";
+    var debtMovId = esGasto && isCardMethod(metodo) ? pushCargoToDebt(metodo, datos.fecha, datos.concepto, datos.monto) : null;
+    state.transactions.push({
+      id: genId(), fecha: datos.fecha, tipo: datos.tipo,
+      categoria: datos.categoria, concepto: datos.concepto, monto: datos.monto, moneda: datos.moneda,
+      metodoPago: metodo, debtMovId: debtMovId
+    });
+    saveState();
+    renderAll();
+  }
 
   // ---------- Ingreso Fijo: bruto/neto toggle ----------
   function updateIngresoFijoFormMode() {
@@ -1551,23 +1676,54 @@
   document.getElementById("formMovimiento").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
-    var esGasto = f.tipo.value === "gasto";
-    var metodo = esGasto ? f.metodoPago.value : "efectivo";
-    var fecha = f.fecha.value, concepto = f.concepto.value.trim(), monto = parseFloat(f.monto.value) || 0;
-    var debtMovId = esGasto && isCardMethod(metodo) ? pushCargoToDebt(metodo, fecha, concepto, monto) : null;
-    state.transactions.push({
-      id: genId(), fecha: fecha, tipo: f.tipo.value,
-      categoria: f.categoria.value, concepto: concepto, monto: monto, moneda: f.moneda.value,
-      metodoPago: metodo, debtMovId: debtMovId
-    });
     var keepDate = f.fecha.value;
+    registrarMovimiento({
+      fecha: keepDate, tipo: f.tipo.value, categoria: f.categoria.value,
+      concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value) || 0,
+      moneda: f.moneda.value, metodoPago: f.metodoPago.value
+    });
     f.reset();
     f.fecha.value = keepDate;
     populateCategorySelect(f.tipo.value);
     updateMovFormMode();
     document.getElementById("filtroMes").value = monthKeyOf(keepDate);
-    saveState();
-    renderAll();
+  });
+
+  // ---------- Registro rápido (FAB) ----------
+  function updateQuickAddFormMode() {
+    var tipo = document.getElementById("quickTipo").value;
+    document.getElementById("quickCampoMetodoPago").style.display = tipo === "gasto" ? "" : "none";
+  }
+  function openQuickAdd() {
+    var f = document.getElementById("formQuickAdd");
+    f.reset();
+    populateCategorySelect(f.tipo.value, document.getElementById("quickCategoria"));
+    updateQuickAddFormMode();
+    refreshMetodoPagoSelect(document.getElementById("quickMetodoPago"));
+    document.getElementById("quickAddOverlay").style.display = "flex";
+    f.concepto.focus();
+  }
+  function closeQuickAdd() {
+    document.getElementById("quickAddOverlay").style.display = "none";
+  }
+  document.getElementById("fabQuickAdd").addEventListener("click", openQuickAdd);
+  document.getElementById("btnQuickAddClose").addEventListener("click", closeQuickAdd);
+  document.getElementById("quickAddOverlay").addEventListener("click", function (e) {
+    if (e.target.id === "quickAddOverlay") closeQuickAdd();
+  });
+  document.getElementById("quickTipo").addEventListener("change", function (e) {
+    populateCategorySelect(e.target.value, document.getElementById("quickCategoria"));
+    updateQuickAddFormMode();
+  });
+  document.getElementById("formQuickAdd").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    registrarMovimiento({
+      fecha: todayStr(), tipo: f.tipo.value, categoria: f.categoria.value,
+      concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value) || 0,
+      moneda: f.moneda.value, metodoPago: f.metodoPago.value
+    });
+    closeQuickAdd();
   });
 
   document.getElementById("formInversion").addEventListener("submit", function (e) {
