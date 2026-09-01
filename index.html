@@ -737,7 +737,8 @@
           <label>Método de pago</label>
           <select name="metodoPago" id="movMetodoPago" class="metodo-select"></select>
         </div>
-        <button type="submit" class="btn">Registrar</button>
+        <button type="submit" class="btn" id="btnMovSubmit">Registrar</button>
+        <button type="button" class="btn secondary" id="btnMovCancelar" style="display:none">Cancelar</button>
       </form>
     </div>
 
@@ -1009,6 +1010,7 @@
   var editingIncomeId = null;
   var editingExpenseId = null;
   var editingDebtId = null;
+  var editingTransactionId = null;
 
   // ---------- Helpers ----------
   function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -1760,20 +1762,70 @@
     renderAll();
   });
 
+  function resetTransactionForm() {
+    var f = document.getElementById("formMovimiento");
+    var keepDate = f.fecha.value;
+    f.reset();
+    f.fecha.value = keepDate;
+    editingTransactionId = null;
+    document.getElementById("btnMovSubmit").textContent = "Registrar";
+    document.getElementById("btnMovCancelar").style.display = "none";
+    populateCategorySelect(f.tipo.value);
+    updateMovFormMode();
+    refreshMetodoPagoSelect(document.getElementById("movMetodoPago"));
+  }
+
+  function startEditTransaction(id) {
+    var t = state.transactions.find(function (x) { return x.id === id; });
+    if (!t) return;
+    var f = document.getElementById("formMovimiento");
+    f.fecha.value = t.fecha;
+    f.tipo.value = t.tipo;
+    populateCategorySelect(t.tipo);
+    updateMovFormMode();
+    f.categoria.value = t.categoria;
+    f.concepto.value = t.concepto;
+    f.monto.value = t.monto;
+    f.moneda.value = t.moneda;
+    refreshMetodoPagoSelect(document.getElementById("movMetodoPago"));
+    f.metodoPago.value = t.metodoPago;
+    editingTransactionId = id;
+    document.getElementById("btnMovSubmit").textContent = "Guardar cambios";
+    document.getElementById("btnMovCancelar").style.display = "";
+    f.concepto.focus();
+    f.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  document.getElementById("btnMovCancelar").addEventListener("click", resetTransactionForm);
+
   document.getElementById("formMovimiento").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
     var keepDate = f.fecha.value;
     document.getElementById("filtroMes").value = monthKeyOf(keepDate);
+    if (editingTransactionId) {
+      var t = state.transactions.find(function (x) { return x.id === editingTransactionId; });
+      if (t) {
+        if (t.debtMovId) removeDebtMov(methodDebtId(t.metodoPago), t.debtMovId);
+        var esGasto = f.tipo.value === "gasto";
+        var metodo = esGasto ? f.metodoPago.value : "efectivo";
+        var concepto = f.concepto.value.trim(), monto = parseFloat(f.monto.value) || 0;
+        var debtMovId = esGasto && isCardMethod(metodo) ? pushCargoToDebt(metodo, keepDate, concepto, monto) : null;
+        t.fecha = keepDate; t.tipo = f.tipo.value; t.categoria = f.categoria.value;
+        t.concepto = concepto; t.monto = monto; t.moneda = f.moneda.value;
+        t.metodoPago = metodo; t.debtMovId = debtMovId;
+        saveState();
+        renderAll();
+      }
+      resetTransactionForm();
+      return;
+    }
     registrarMovimiento({
       fecha: keepDate, tipo: f.tipo.value, categoria: f.categoria.value,
       concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value) || 0,
       moneda: f.moneda.value, metodoPago: f.metodoPago.value
     });
-    f.reset();
-    f.fecha.value = keepDate;
-    populateCategorySelect(f.tipo.value);
-    updateMovFormMode();
+    resetTransactionForm();
   });
 
   // ---------- Registro rápido (FAB) ----------
@@ -1999,6 +2051,11 @@
     var editDebtBtn = e.target.closest(".edit-debt-btn");
     if (editDebtBtn) {
       startEditDebt(editDebtBtn.dataset.id);
+      return;
+    }
+    var editTransactionBtn = e.target.closest(".edit-transaction-btn");
+    if (editTransactionBtn) {
+      startEditTransaction(editTransactionBtn.dataset.id);
       return;
     }
     var cobrarBtn = e.target.closest(".cobrar-btn");
@@ -2237,7 +2294,8 @@
       var metodoTag = isIncome ? "—" : '<span class="tag' + (isCardMethod(t.metodoPago) ? " card" : "") + '">' + metodoPagoLabel(t.metodoPago) + '</span>';
       return "<tr><td>" + t.fecha + "</td><td><span class=\"tag\">" + (isIncome ? "Ingreso" : "Gasto") + "</span></td><td>" + escapeHtml(t.categoria) +
         "</td><td>" + escapeHtml(t.concepto) + "</td><td>" + metodoTag + '</td><td class="amount ' + (isIncome ? "pos" : "neg") + '">' + fmtCur(t.monto, t.moneda) +
-        '</td><td><button class="del-btn" data-list="transactions" data-id="' + t.id + '">✕</button></td></tr>';
+        '</td><td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap"><button class="btn secondary small edit-transaction-btn" data-id="' + t.id + '">✎</button>' +
+        '<button class="del-btn" data-list="transactions" data-id="' + t.id + '">✕</button></td></tr>';
     }).join("");
     document.getElementById("emptyMovimientos").style.display = list.length ? "none" : "block";
   }
