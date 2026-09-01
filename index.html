@@ -670,7 +670,8 @@
             <label>Método de pago</label>
             <select name="metodoPago" id="gastoFijoMetodoPago" class="metodo-select"></select>
           </div>
-          <button type="submit" class="btn">Agregar</button>
+          <button type="submit" class="btn" id="btnGastoFijoSubmit">Agregar</button>
+          <button type="button" class="btn secondary" id="btnGastoFijoCancelar" style="display:none">Cancelar</button>
         </form>
         <table style="margin-top:16px">
           <thead><tr><th>Concepto</th><th>Monto</th><th>Método</th><th></th></tr></thead>
@@ -977,6 +978,7 @@
   var expandedInvestments = {};
   var expandedDebts = {};
   var editingIncomeId = null;
+  var editingExpenseId = null;
 
   // ---------- Helpers ----------
   function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -1667,15 +1669,50 @@
     renderAll();
   });
 
+  function resetExpenseForm() {
+    var f = document.getElementById("formGastoFijo");
+    f.reset();
+    editingExpenseId = null;
+    document.getElementById("btnGastoFijoSubmit").textContent = "Agregar";
+    document.getElementById("btnGastoFijoCancelar").style.display = "none";
+    refreshMetodoPagoSelect(document.getElementById("gastoFijoMetodoPago"));
+  }
+
+  function startEditExpense(id) {
+    var x = state.fixedExpenses.find(function (i) { return i.id === id; });
+    if (!x) return;
+    var f = document.getElementById("formGastoFijo");
+    f.concepto.value = x.concepto;
+    f.monto.value = x.monto;
+    f.moneda.value = x.moneda;
+    f.diaPago.value = x.diaPago != null ? x.diaPago : "";
+    refreshMetodoPagoSelect(document.getElementById("gastoFijoMetodoPago"));
+    f.metodoPago.value = x.metodoPago;
+    editingExpenseId = id;
+    document.getElementById("btnGastoFijoSubmit").textContent = "Guardar cambios";
+    document.getElementById("btnGastoFijoCancelar").style.display = "";
+    f.concepto.focus();
+    f.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  document.getElementById("btnGastoFijoCancelar").addEventListener("click", resetExpenseForm);
+
   document.getElementById("formGastoFijo").addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
-    state.fixedExpenses.push({
-      id: genId(), concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value), moneda: f.moneda.value,
+    var existing = editingExpenseId ? state.fixedExpenses.find(function (i) { return i.id === editingExpenseId; }) : null;
+    var entry = {
+      id: editingExpenseId || genId(), concepto: f.concepto.value.trim(), monto: parseFloat(f.monto.value), moneda: f.moneda.value,
       diaPago: f.diaPago.value ? parseInt(f.diaPago.value, 10) : null,
-      metodoPago: f.metodoPago.value, pagos: []
-    });
-    f.reset();
+      metodoPago: f.metodoPago.value, pagos: existing ? existing.pagos : []
+    };
+    if (editingExpenseId) {
+      var idx = state.fixedExpenses.findIndex(function (i) { return i.id === editingExpenseId; });
+      if (idx > -1) state.fixedExpenses[idx] = entry;
+    } else {
+      state.fixedExpenses.push(entry);
+    }
+    resetExpenseForm();
     saveState();
     renderAll();
   });
@@ -1849,6 +1886,11 @@
     var editIncomeBtn = e.target.closest(".edit-income-btn");
     if (editIncomeBtn) {
       startEditIncome(editIncomeBtn.dataset.id);
+      return;
+    }
+    var editExpenseBtn = e.target.closest(".edit-expense-btn");
+    if (editExpenseBtn) {
+      startEditExpense(editExpenseBtn.dataset.id);
       return;
     }
     var cobrarBtn = e.target.closest(".cobrar-btn");
@@ -2044,9 +2086,10 @@
     expTbody.innerHTML = state.fixedExpenses.map(function (x) {
       var pagado = isExpensePagado(x, mk);
       var pagarBtn = '<button class="btn small pagar-btn' + (pagado ? " secondary" : "") + '" data-id="' + x.id + '">' + (pagado ? "✓ Pagado" : "💸 Pagar") + '</button> ';
+      var editBtn = '<button class="btn secondary small edit-expense-btn" data-id="' + x.id + '">✎</button> ';
       var metodoTag = '<span class="tag' + (isCardMethod(x.metodoPago) ? " card" : "") + '">' + metodoPagoLabel(x.metodoPago) + (x.diaPago ? " · día " + x.diaPago : "") + '</span>';
       return "<tr><td>" + escapeHtml(x.concepto) + '</td><td class="amount neg">' + fmtCur(x.monto, x.moneda) + "</td><td>" + metodoTag +
-        '</td><td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">' + pagarBtn + '<button class="del-btn" data-list="fixedExpenses" data-id="' + x.id + '">✕</button></td></tr>';
+        '</td><td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">' + pagarBtn + editBtn + '<button class="del-btn" data-list="fixedExpenses" data-id="' + x.id + '">✕</button></td></tr>';
     }).join("");
     document.getElementById("emptyGastosFijos").style.display = state.fixedExpenses.length ? "none" : "block";
   }
