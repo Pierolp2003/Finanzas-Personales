@@ -959,7 +959,7 @@
     <div class="card">
       <h2 style="margin:0">🗓️ Flujo de caja proyectado — todos los meses</h2>
       <p class="hint" id="flujoAnualRango" style="margin:8px 0 0"></p>
-      <p class="hint" style="margin:8px 0 12px">Arranca en tu saldo inicial y va sumando el balance de cada mes registrado. Los meses ya pasados muestran lo que <b>realmente</b> ocurrió (confirmado); el mes actual parte de tu <b>Saldo Actual</b> de hoy más lo pendiente; los meses futuros son una <b>proyección</b> que asume que tus ingresos y gastos fijos se repiten y que se pagan las deudas de tarjeta según su fecha de vencimiento.</p>
+      <p class="hint" style="margin:8px 0 12px">Ingresos y Gastos muestran el <b>total del mes</b> en efectivo/Yape/débito (fijos + variables + deuda de tarjeta que vence ese mes), sin importar si ya lo confirmaste. Los meses ya pasados muestran lo que <b>realmente</b> ocurrió; los meses futuros son una <b>proyección</b> que asume que tus ingresos y gastos fijos se repiten y que se pagan las deudas de tarjeta según su fecha de vencimiento. El <b>Saldo acumulado</b> va sumando el balance de cada mes desde tu saldo inicial — para el mes actual parte directamente de tu <b>Saldo Actual</b> de hoy, así que puede no coincidir exactamente con "fila anterior + Ingresos − Gastos" justo en ese mes.</p>
       <div id="flujoAnualChart"></div>
     </div>
     <div class="card">
@@ -1393,6 +1393,11 @@
     state.fixedExpenses.forEach(function (x) { addToBucket(b, x.moneda, Number(x.monto)); });
     return b;
   }
+  function totalFixedExpenseCashAll() {
+    var b = emptyBucket();
+    state.fixedExpenses.forEach(function (x) { if (isCashMethod(x.metodoPago)) addToBucket(b, x.moneda, Number(x.monto)); });
+    return b;
+  }
 
   function transactionsForMonth(monthKey) { return state.transactions.filter(function (t) { return monthKeyOf(t.fecha) === monthKey; }); }
   function variableIncomeForMonth(monthKey) {
@@ -1666,6 +1671,33 @@
     });
 
     return { start: start, items: items, total: total };
+  }
+
+  // Total de ingresos/gastos en efectivo de un mes actual o futuro, sin importar si ya se confirmó
+  // o todavía está pendiente (a diferencia de buildCashFlowItems, que solo lista lo pendiente).
+  // Los ingresos/gastos fijos se asumen recurrentes cada mes; lo mismo el aporte mensual de una
+  // inversión recurrente. Se usa solo para mostrar el total del mes en el Flujo de Caja anual — el
+  // saldo proyectado real sigue calculándose con buildCashFlowItems, que sí distingue lo pendiente.
+  function fullCashFlowForMonth(mk) {
+    var ingresos = emptyBucket(), gastos = emptyBucket();
+    var fijoIn = totalFixedIncome(), varIn = variableIncomeForMonth(mk);
+    var fijoOutCash = totalFixedExpenseCashAll();
+    var varOutCash = emptyBucket();
+    transactionsForMonth(mk).filter(function (t) { return t.tipo === "gasto" && isCashMethod(t.metodoPago); }).forEach(function (t) { addToBucket(varOutCash, t.moneda, Number(t.monto)); });
+    var cardDue = totalDueForMonth(mk);
+    var investCash = emptyBucket();
+    state.investments.forEach(function (inv) {
+      if (inv.aporteMensual && isCashMethod(inv.metodoPago)) {
+        addToBucket(investCash, inv.moneda, Number(inv.aporteMensual));
+      } else {
+        inv.aportes.forEach(function (a) { if (isCashMethod(a.metodoPago) && monthKeyOf(a.fecha) === mk) addToBucket(investCash, inv.moneda, Number(a.monto)); });
+      }
+    });
+    CURRENCIES.forEach(function (c) {
+      ingresos[c] = (fijoIn[c] || 0) + (varIn[c] || 0);
+      gastos[c] = (fijoOutCash[c] || 0) + (varOutCash[c] || 0) + (cardDue[c] || 0) + (investCash[c] || 0);
+    });
+    return { ingresos: ingresos, gastos: gastos };
   }
 
   // Junta todos los meses que tienen algún dato registrado (transacciones, cobros/pagos fijos,
@@ -2473,20 +2505,18 @@
       } else if (mk === curMk) {
         estado = "hoy";
         var cf = buildCashFlowProjection(mk);
-        cf.items.forEach(function (it) {
-          CURRENCIES.forEach(function (c) {
-            if (it.sign > 0) ingresos[c] += (it.bucket[c] || 0); else gastos[c] += (it.bucket[c] || 0);
-          });
-        });
+        var full = fullCashFlowForMonth(mk);
+        ingresos = full.ingresos; gastos = full.gastos;
         CURRENCIES.forEach(function (c) { running[c] = cf.total[c] || 0; });
       } else {
         estado = "proyectado";
+        var fullFuturo = fullCashFlowForMonth(mk);
+        ingresos = fullFuturo.ingresos; gastos = fullFuturo.gastos;
         buildCashFlowItems(mk).forEach(function (it) {
           CURRENCIES.forEach(function (c) {
-            if (it.sign > 0) ingresos[c] += (it.bucket[c] || 0); else gastos[c] += (it.bucket[c] || 0);
+            if (it.sign > 0) running[c] += (it.bucket[c] || 0); else running[c] -= (it.bucket[c] || 0);
           });
         });
-        CURRENCIES.forEach(function (c) { running[c] += ingresos[c] - gastos[c]; });
       }
       var balance = emptyBucket();
       CURRENCIES.forEach(function (c) { balance[c] = running[c]; });
